@@ -45,8 +45,9 @@
 
 local options = {
     -- Seconds after file-loaded before doing anything at all. Gives the
-    -- decoder time to settle so video-params/hw-pixelformat reads a
-    -- reliable value. This delay is intentional -- do not remove it.
+    -- decoder time to settle so video-params/pixelformat and the frame
+    -- dimensions read reliable values. This delay is intentional -- do not
+    -- remove it.
     settle_delay = 3,
 
     -- Whether to auto-detect and crop black bars. VSR upscaling still
@@ -78,8 +79,7 @@ local options = {
     -- filename from the script name "hdr_mode" and silently ignores a
     -- hyphenated one -- which passes HDR through rather than switching it
     -- live, so there's no race with this script's once-per-file check).
-    -- mpv's
-    -- own nvidia-true-hdr filter has no display-state check built in and
+    -- mpv's own nvidia-true-hdr filter has no display-state check built in and
     -- visibly misbehaves (wrong colors) if applied on an SDR display --
     -- https://github.com/mpv-player/mpv/issues/17800 -- so this script
     -- does that gating itself rather than trusting the filter to.
@@ -98,7 +98,10 @@ local timers = {
     retry = nil,
 }
 
--- Seconds after a failed detection to try again. A single 1-second sample
+-- Seconds to wait after each failed detection before trying again. These
+-- are gaps BETWEEN attempts, not offsets from the start of the file, so
+-- the passes land at roughly 4s / 20s / 65s / 185s -- spread across the
+-- film rather than bunched at the front. A single 1-second sample
 -- taken settle_delay into the file lands inside the studio logo, the
 -- distributor card or the fade-in from black on a large share of feature
 -- films, and cropdetect over an all-black window returns a degenerate
@@ -115,6 +118,18 @@ local applying       = false  -- guard against re-entrant trigger from vf change
 local vsr_was_applied = false -- tracks whether @vsr is currently in the chain
 local crop_watcher    = nil   -- pending video-out-params/w observer fn, if any
 local crop_attempt    = 0     -- how many detections have run for this file
+
+-- Signature of the state apply_combined() last actually put in place, so a
+-- re-evaluation reaching the same conclusion can return without touching
+-- the filter chain. Removing and re-appending @vsr forces a VO reconfig,
+-- which is visible; a genuinely 16:9 film runs the whole retry schedule
+-- finding no bars each time, and without this every one of those attempts
+-- would tear the filter down and rebuild it identically mid-playback.
+--
+-- Declared up here, not next to apply_combined(): clear_all() is defined
+-- earlier in the file and has to reset it, and a local declared below that
+-- point would leave clear_all()'s assignment writing to a global instead.
+local last_applied    = nil
 
 -- Forward declaration: finish_detection() schedules a retry through
 -- begin_evaluation(), which is defined further down. Without this the
@@ -214,6 +229,11 @@ local function clear_all()
     -- schedule left over from the previous file would otherwise fire
     -- against this one.
     crop_attempt = 0
+    -- Must be cleared with the rest of the state: a new file that happens
+    -- to produce the same scale/crop signature as the previous one would
+    -- otherwise hit apply_combined's no-change short-circuit and never get
+    -- its @vsr filter inserted at all.
+    last_applied = nil
 
     local vf_current = mp.get_property("vf") or ""
     if vf_current:find("@vsr") then
@@ -264,11 +284,10 @@ local function apply_combined(crop_meta)
     -- first was dead code.
     local pixfmt = mp.get_property_native("video-params/pixelformat")
 
-    local vf_current = mp.get_property("vf") or ""
-    if vf_current:find("@vsr") then
-        mp.command("vf remove @vsr")
-    end
-    vsr_was_applied = false
+    -- @vsr is NOT removed here. The teardown is deferred until after the
+    -- no-change check below, so a re-evaluation that reaches the same
+    -- conclusion leaves the existing filter untouched instead of rebuilding
+    -- it identically.
 
     -- Use the cropped content size for the scale decision when we have a
     -- valid crop; otherwise fall back to the raw decoded size.
@@ -336,6 +355,26 @@ local function apply_combined(crop_meta)
     local hdr_wanted = options.nvidia_true_hdr and source_is_sdr and
         vsr_supported_pixfmt and
         mp.get_property_native("user-data/display-info/hdr-status") == "on"
+
+    -- No-change short-circuit. Scale is quantised to 4 decimals here only
+    -- for comparison, matching the %.4f actually handed to the filter, so
+    -- float noise below what was applied cannot count as a difference.
+    local signature = string.format("%s|%.4f|%s|%s|%s",
+        crop_meta and (crop_meta.w .. "x" .. crop_meta.h .. "+" ..
+                       crop_meta.x .. "+" .. crop_meta.y) or "nocrop",
+        scale or 0, tostring(upscale_wanted), tostring(hdr_wanted),
+        tostring(pixfmt))
+    if last_applied == signature and (mp.get_property("vf") or ""):find("@vsr") then
+        applying = false
+        return
+    end
+
+    local vf_current = mp.get_property("vf") or ""
+    if vf_current:find("@vsr") then
+        mp.command("vf remove @vsr")
+    end
+    vsr_was_applied = false
+    last_applied = signature
 
     local vsr_applied_now = false
     local hdr_applied_now = false
