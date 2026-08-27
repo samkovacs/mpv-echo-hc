@@ -47,7 +47,12 @@ local state = {
     target_peak = mp.get_property_native("target-peak"),
     target_prim = mp.get_property_native("target-prim"),
     target_trc = mp.get_property_native("target-trc"),
-    target_contrast = mp.get_property_native("target_contrast"),
+    -- "target-contrast", not "target_contrast". mpv property names use
+    -- hyphens; the underscore form does not exist, so this read returned
+    -- nil and every restore path below (apply_sdr_settings,
+    -- reset_target_settings, effective_contrast's fallback) was handing
+    -- nil to set_property_native instead of the pre-playback value.
+    target_contrast = mp.get_property_native("target-contrast"),
     colorspace_hint = mp.get_property_native("target-colorspace-hint"),
     inverse_mapping = mp.get_property_native("inverse-tone-mapping")
 }
@@ -67,13 +72,54 @@ local function switch_display_mode(enable)
     mp.commandv('script-message', 'toggle-hdr-display', arg)
 end
 
+-- Peak/contrast for the display mpv is CURRENTLY on, recomputed on every
+-- call rather than cached.
+--
+-- These used to be resolved once and assigned back into o.target_peak /
+-- o.target_contrast. That latched them permanently: once o.target_peak
+-- held a detected value it was > 203, so the "detect it" branch could
+-- never run again; once o.target_contrast was no longer the literal
+-- string "auto", its branch could never run again either. mpv-display-
+-- plugin does push fresh max-luminance/min-luminance when the window
+-- moves to a different monitor (switch_hdr is wired to
+-- user-data/display-info/hdr-status), but every one of those updates was
+-- discarded. On a machine with three displays of different peak and
+-- black level that meant whichever monitor mpv started on set the tone-
+-- mapping target for the rest of the session.
+--
+-- Keeping them as pure functions of current plugin state is what makes
+-- the values track the display. Do not hoist the results into `o`.
+local function effective_peak()
+    -- An explicit peak in hdr_mode.conf still wins, matching the original
+    -- semantics: only a configured value of <= 203 (i.e. the default "0",
+    -- or a nonsense one) defers to detection.
+    local configured = tonumber(o.target_peak) or 0
+    if configured > 203 then return configured end
+    local detected = tonumber(mp.get_property_native("user-data/display-info/max-luminance"))
+    if detected and detected > 203 then return math.floor(detected) end
+    return 203
+end
+
+local function effective_contrast(peak)
+    if o.target_contrast ~= "auto" then return o.target_contrast end
+    local min_luma = tonumber(mp.get_property_native("user-data/display-info/min-luminance"))
+    if peak > 203 and min_luma then
+        -- A measured black level of exactly 0 is how an OLED reports; any
+        -- finite ratio would be wrong, and dividing by it would error.
+        if min_luma == 0 then return "inf" end
+        return math.floor(peak / min_luma)
+    end
+    return state.target_contrast
+end
+
 local function apply_hdr_settings()
+    local peak = effective_peak()
     mp.set_property_native("icc-profile", "")
     mp.set_property_native("icc-profile-auto", false)
     mp.set_property_native("target-prim", "bt.2020")
     mp.set_property_native("target-trc", "pq")
-    mp.set_property_native("target-peak", tonumber(o.target_peak))
-    mp.set_property_native("target-contrast", o.target_contrast)
+    mp.set_property_native("target-peak", peak)
+    mp.set_property_native("target-contrast", effective_contrast(peak))
     mp.set_property_native("target-colorspace-hint", "yes")
     mp.set_property_native("inverse-tone-mapping", "no")
 end
@@ -164,22 +210,13 @@ local function switch_hdr()
     local params = mp.get_property_native("video-out-params")
     local gamma = params and params["gamma"]
     local max_luma = params and params["max-luma"]
-    local target_max_luma = mp.get_property_native("user-data/display-info/max-luminance", "203")
-    local target_min_luma = mp.get_property_native("user-data/display-info/min-luminance")
     local is_hdr = max_luma and max_luma > 203
     if not path or not gamma then return end
 
-    if tonumber(o.target_peak) <= 203 and tonumber(target_max_luma) > 203 then
-        o.target_peak = math.floor(tonumber(target_max_luma))
-    end
-
-    if o.target_contrast == "auto" and tonumber(o.target_peak) > 203 and target_min_luma then
-        if tonumber(target_min_luma) == 0 then
-            o.target_contrast = "inf"
-        else
-            o.target_contrast = math.floor(tonumber(o.target_peak) / tonumber(target_min_luma))
-        end
-    end
+    -- Peak/contrast resolution used to happen here, writing its results
+    -- back into `o` and latching them for the session. It now lives in
+    -- effective_peak()/effective_contrast(), evaluated at the point of
+    -- use so a move to another monitor picks up that monitor's values.
 
     local current_state = is_hdr and "hdr" or "sdr"
     local pause_changed = false
@@ -190,7 +227,10 @@ local function switch_hdr()
     local target_trc = mp.get_property_native("target-trc")
     local is_fullscreen = fullscreen or maximized
 
-    if current_state == "hdr" and tonumber(o.target_peak) > 203 then
+    -- effective_peak(), not tonumber(o.target_peak): o is no longer
+    -- mutated, so with the default target_peak=0 the old test would be
+    -- permanently false and the entire HDR branch unreachable.
+    if current_state == "hdr" and effective_peak() > 203 then
         local function continue_hdr()
             local time = mp.get_property_number("time-pos")
             local paused = mp.get_property_native("pause")
@@ -258,12 +298,14 @@ local function check_paramet()
     local is_hdr = max_luma and max_luma > 203
     if not gamma then return end
 
-    if is_hdr and hdr_active and o.hdr_mode ~= "noth" and tonumber(o.target_peak) > 203 then
-        if target_peak ~= o.target_peak then
-            mp.set_property_native("target-peak", o.target_peak)
+    local peak = effective_peak()
+    if is_hdr and hdr_active and o.hdr_mode ~= "noth" and peak > 203 then
+        local contrast = effective_contrast(peak)
+        if target_peak ~= peak then
+            mp.set_property_native("target-peak", peak)
         end
-        if target_contrast ~= o.target_contrast then
-            mp.set_property_native("target-contrast", o.target_contrast)
+        if target_contrast ~= contrast then
+            mp.set_property_native("target-contrast", contrast)
         end
         if target_prim ~= "bt.2020" then
             mp.set_property_native("target-prim", "bt.2020")
