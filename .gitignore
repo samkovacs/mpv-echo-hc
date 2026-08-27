@@ -1,0 +1,39 @@
+# Runtime binaries -- downloaded/managed by 1_Full_Latest_MPV_Installer.ps1,
+# not tracked as source (mirrors how mpv.exe/ffmpeg.exe/yt-dlp.exe have
+# always been kept out of git in practice)
+mpv.exe
+ffmpeg.exe
+ffplay.exe
+ffprobe.exe
+yt-dlp.exe
+guessit.exe
+.guessit_last_version.txt
+
+# Temporary 7-Zip fallback the installer downloads/removes itself;
+# ignored defensively in case a crash mid-run leaves it behind
+/7z/
+
+# mpv shader cache -- regenerated automatically, not source
+portable_config/shaders/cache/
+
+# Testing artifacts
+*.log
+samplevideo*.mp4
+portable_config.zip
+
+# Claude Code session/worktree metadata -- development-environment
+# specific, not part of the shipped repo
+.claude/
+
+# Remainder of the mpv .7z the installer extracts into the repo root
+# (Extract-Archive unpacks straight to $installDir, so these arrive and
+# get replaced alongside mpv.exe -- same class, same reason).
+mpv.com
+d3dcompiler_43.dll
+/mpv/
+
+# mpv runtime state, not config
+portable_config/watch_later/
+
+# Pre-git snapshot directories
+portable_config.backup-*/

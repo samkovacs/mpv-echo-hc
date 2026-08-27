@@ -1,0 +1,45 @@
+<svg width="1200" height="220" viewBox="0 0 1200 220" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14161c"/>
+      <stop offset="100%" stop-color="#090a0d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="14%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#ff8232" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#ff8232" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="playGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff9a52"/>
+      <stop offset="100%" stop-color="#ff8232"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="220" fill="url(#bg)"/>
+  <rect width="1200" height="220" fill="url(#glow)"/>
+  <rect x="0" y="0" width="6" height="220" fill="#ff8232"/>
+
+  <circle cx="105" cy="110" r="52" fill="url(#playGrad)"/>
+  <path d="M92 84 L136 110 L92 136 Z" fill="#14161c"/>
+
+  <text x="185" y="97" font-family="Segoe UI, -apple-system, Arial, sans-serif" font-size="40" font-weight="700" fill="#f5f5f4">MPV Echostorm Edition</text>
+  <text x="187" y="130" font-family="Segoe UI, -apple-system, Arial, sans-serif" font-size="18" fill="#a8a8a8">Portable Windows mpv build tuned for NVIDIA RTX Video Super Resolution</text>
+
+  <g font-family="Segoe UI, -apple-system, Arial, sans-serif" font-size="14" font-weight="600">
+    <g transform="translate(187, 152)">
+      <rect width="88" height="28" rx="14" fill="#1f2128" stroke="#ff8232" stroke-width="1"/>
+      <text x="44" y="19" text-anchor="middle" fill="#ff8232">RTX VSR</text>
+    </g>
+    <g transform="translate(287, 152)">
+      <rect width="72" height="28" rx="14" fill="#1f2128" stroke="#ff8232" stroke-width="1"/>
+      <text x="36" y="19" text-anchor="middle" fill="#ff8232">HDR</text>
+    </g>
+    <g transform="translate(371, 152)">
+      <rect width="98" height="28" rx="14" fill="#1f2128" stroke="#ff8232" stroke-width="1"/>
+      <text x="49" y="19" text-anchor="middle" fill="#ff8232">Portable</text>
+    </g>
+    <g transform="translate(481, 152)">
+      <rect width="130" height="28" rx="14" fill="#1f2128" stroke="#ff8232" stroke-width="1"/>
+      <text x="65" y="19" text-anchor="middle" fill="#ff8232">No Admin Required</text>
+    </g>
+  </g>
+</svg>

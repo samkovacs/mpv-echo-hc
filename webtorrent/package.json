@@ -1,0 +1,19 @@
+{
+  "name": "webtorrent",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "webtorrent-mpv-hook": "^1.4.7"
+  },
+  "trustedDependencies": [
+    "node-datachannel",
+    "utp-native"
+  ]
+}
