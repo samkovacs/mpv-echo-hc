@@ -73,9 +73,12 @@ local options = {
     -- 0.40+ (d3d11vpp's nvidia-true-hdr suboption) and RTX Video HDR
     -- enabled in the NVIDIA app. Off by default -- this only ever engages
     -- when the display is confirmed already in HDR mode via the companion
-    -- mpv-display-plugin (see hdr-mode.lua, whose own default hdr_mode=pass
-    -- already assumes HDR is passed through rather than switched live, so
-    -- there's no race with this script's own once-per-file check). mpv's
+    -- mpv-display-plugin (see hdr-mode.lua, configured hdr_mode=pass in
+    -- script-opts/hdr_mode.conf -- note the UNDERSCORE, mpv derives that
+    -- filename from the script name "hdr_mode" and silently ignores a
+    -- hyphenated one -- which passes HDR through rather than switching it
+    -- live, so there's no race with this script's once-per-file check).
+    -- mpv's
     -- own nvidia-true-hdr filter has no display-state check built in and
     -- visibly misbehaves (wrong colors) if applied on an SDR display --
     -- https://github.com/mpv-player/mpv/issues/17800 -- so this script
@@ -92,11 +95,32 @@ local timers = {
     settle = nil,
     detect_crop = nil,
     crop_confirm = nil,
+    retry = nil,
 }
+
+-- Seconds after a failed detection to try again. A single 1-second sample
+-- taken settle_delay into the file lands inside the studio logo, the
+-- distributor card or the fade-in from black on a large share of feature
+-- films, and cropdetect over an all-black window returns a degenerate
+-- rectangle (measured: -1918x-1078+1920+1080 on a 1920x1080 source). That
+-- gets rejected below, and without a retry the file then plays letterboxed
+-- to the end -- the exact thing this script exists to prevent, failing
+-- silently because suppress_osd hides the only diagnostic.
+--
+-- Retries stop at the first usable crop, so a film that detects correctly
+-- on the first attempt pays nothing.
+local retry_delays = {15, 45, 120}
 
 local applying       = false  -- guard against re-entrant trigger from vf changes
 local vsr_was_applied = false -- tracks whether @vsr is currently in the chain
 local crop_watcher    = nil   -- pending video-out-params/w observer fn, if any
+local crop_attempt    = 0     -- how many detections have run for this file
+
+-- Forward declaration: finish_detection() schedules a retry through
+-- begin_evaluation(), which is defined further down. Without this the
+-- name inside that closure would compile as a global lookup and be nil at
+-- call time.
+local begin_evaluation
 
 local function unwatch_crop_confirm()
     if crop_watcher then
@@ -148,11 +172,22 @@ local function restore_hdr_profile()
     hdr_profile_applied = false
     -- Only meaningful for SDR sources we converted. A natively-HDR file has
     -- the profile applied by profile-cond, which does its own restore.
-    for _, o in ipairs({"target-trc", "target-prim", "target-peak",
-                        "target-contrast", "sub-hdr-peak", "dither-depth",
+    --
+    -- This list must mirror exactly what [HDR] in profiles.conf sets, and
+    -- nothing else. target-trc/-prim/-peak/-contrast/-colorspace-hint used
+    -- to be reset here too; they now belong to hdr-mode.lua, which restores
+    -- them itself when video-out-params drops back below the HDR threshold.
+    -- Forcing them to "auto" from here would just be a second writer
+    -- clobbering the owner -- the situation this split exists to end.
+    --
+    -- Verified that hdr-mode.lua does cover the RTX Video HDR case: with
+    -- nvidia-true-hdr active on an SDR source, video-out-params reports
+    -- gamma=pq primaries=bt.2020 max-luma=1000, which is above its >203
+    -- test, so apply_hdr_settings() runs and the render target comes out
+    -- trc=pq prim=bt.2020 peak=603 contrast=inf hint=yes.
+    for _, o in ipairs({"sub-hdr-peak", "dither-depth",
                         "d3d11-output-format", "d3d11-output-csp",
-                        "hdr-compute-peak", "target-colorspace-hint",
-                        "video-output-levels"}) do
+                        "hdr-compute-peak", "video-output-levels"}) do
         mp.commandv("set", o, "auto")
     end
     -- image-subs-hdr-peak has no "auto": its choices are sdr/video/
@@ -172,7 +207,13 @@ local function clear_all()
     kill_timer("settle")
     kill_timer("detect_crop")
     kill_timer("crop_confirm")
+    kill_timer("retry")
     unwatch_crop_confirm()
+    -- Reset here rather than in on_file_loaded: clear_all() is also the
+    -- end-file handler and the manual-toggle reset path, and a retry
+    -- schedule left over from the previous file would otherwise fire
+    -- against this one.
+    crop_attempt = 0
 
     local vf_current = mp.get_property("vf") or ""
     if vf_current:find("@vsr") then
@@ -216,8 +257,12 @@ local function apply_combined(crop_meta)
     local display_height = mp.get_property_native("display-height")
     local raw_width       = mp.get_property_native("width")
     local raw_height      = mp.get_property_native("height")
-    local pixfmt = mp.get_property_native("video-params/hw-pixelformat")
-               or mp.get_property_native("video-params/pixelformat")
+    -- video-params/hw-pixelformat is always nil here: hwdec=d3d11va-copy
+    -- copies every decoded frame back to system RAM, so mpv reports the
+    -- software format and the hw one stays unset (measured: nv12 for 8-bit
+    -- H.264, p010 for 10-bit HEVC, hw-pixelformat nil for both). Reading it
+    -- first was dead code.
+    local pixfmt = mp.get_property_native("video-params/pixelformat")
 
     local vf_current = mp.get_property("vf") or ""
     if vf_current:find("@vsr") then
@@ -244,27 +289,58 @@ local function apply_combined(crop_meta)
     -- min() is correct for both orientations: 16:9 content on a 21:9 panel is
     -- height-limited, while genuinely 2.39:1 content (or 16:9 content after
     -- autocrop strips letterbox bars) is width-limited and still picks width.
+    --
+    -- The ratio is used exactly as computed. It used to be rounded DOWN to
+    -- the nearest 0.1, which cost up to 12.6% of the picture on this setup:
+    --
+    --   display     content              exact  floored  VSR out    ideal
+    --   3440x1440   1080p 1.85 cropped   1.390    1.3   2496x1346  2668x1440
+    --   3440x1440   1080p 2.39 cropped   1.791    1.7   3264x1366  3438x1440
+    --   3440x1440   1080p 16:9           1.333    1.3   2496x1404  2560x1440
+    --
+    -- Whatever VSR left undersized was then made up by mpv's own
+    -- scale=ewa_lanczossharp -- i.e. VSR's output getting re-upscaled by a
+    -- conventional scaler, precisely the softening the min() reasoning
+    -- above exists to avoid. The 0.1 grid bought nothing either: d3d11vpp
+    -- takes arbitrary float scales (verified: scale=1.791 on 1280x720
+    -- produces 2292x1290 with "NVIDIA RTX Super Resolution enabled").
     local scale = nil
     if content_width and content_height and display_width and display_height
        and content_width > 0 and content_height > 0 then
         scale = math.min(display_width  / content_width,
                          display_height / content_height)
-        scale = math.floor(scale * 10) / 10  -- round down to nearest 0.1
     end
 
-    -- p010/p016 (10-bit HW decode) and other formats are excluded here --
-    -- NVIDIA VSR support for 10-bit is inconsistent, and RTX Video HDR is
-    -- an SDR->HDR enhancement, so an already-HDR (10-bit) source is out of
-    -- scope for both anyway.
-    local is_sdr_pixfmt  = (pixfmt == "nv12" or pixfmt == "yuv420p")
-    local upscale_wanted = scale and scale > 1
-    local hdr_wanted = options.nvidia_true_hdr and is_sdr_pixfmt and
+    -- VSR upscaling: NVIDIA's d3d11vpp path handles 10-bit as happily as
+    -- 8-bit. Verified on this GPU -- feeding it p010 logs "NVIDIA RTX Super
+    -- Resolution enabled" exactly as nv12 does. The previous gate allowed
+    -- only nv12/yuv420p, which silently excluded every 10-bit source:
+    -- modern HEVC/AV1 web releases, most current anime encodes, all HDR.
+    local vsr_supported_pixfmt =
+        pixfmt == "nv12"  or pixfmt == "yuv420p" or
+        pixfmt == "p010"  or pixfmt == "p016"    or
+        pixfmt == "yuv420p10"
+
+    -- RTX Video HDR is an SDR->HDR conversion, so it has to gate on the
+    -- source actually being SDR. That is a transfer-function question, not
+    -- a bit-depth one -- the old test conflated the two, rejecting 10-bit
+    -- bt.709/bt.1886 encodes (which are SDR and valid input) purely for
+    -- being 10-bit.
+    local gamma = mp.get_property_native("video-params/gamma")
+    local source_is_sdr = gamma ~= "pq" and gamma ~= "hlg"
+
+    -- Guard with an epsilon: a ratio of 1.0001 (content already at display
+    -- size, off by a rounding step) is not worth a filter insert, and
+    -- inserting @vsr at scale~=1 costs a full d3d11vpp pass for nothing.
+    local upscale_wanted = scale and scale > 1.01
+    local hdr_wanted = options.nvidia_true_hdr and source_is_sdr and
+        vsr_supported_pixfmt and
         mp.get_property_native("user-data/display-info/hdr-status") == "on"
 
     local vsr_applied_now = false
     local hdr_applied_now = false
     if upscale_wanted or hdr_wanted then
-        if is_sdr_pixfmt then
+        if vsr_supported_pixfmt then
             -- scale=1 (no resize) is used whenever upscaling itself isn't
             -- wanted -- content already at/above display resolution, or
             -- this insert is for HDR-only reasons. `scale` can be a real
@@ -272,7 +348,12 @@ local function apply_combined(crop_meta)
             -- and using it unguarded would silently downscale the frame
             -- as a side effect of an HDR-only apply -- gate on
             -- upscale_wanted explicitly rather than just nil-checking.
-            local filter = "@vsr:d3d11vpp:scaling-mode=nvidia:scale=" .. (upscale_wanted and scale or 1)
+            --
+            -- %.4f, not tostring(): Lua would render the float in whatever
+            -- form %.14g picks, which for some ratios is exponent notation
+            -- ("1e+00") that the filter's option parser does not accept.
+            local filter = string.format("@vsr:d3d11vpp:scaling-mode=nvidia:scale=%.4f",
+                                         upscale_wanted and scale or 1)
             if hdr_wanted then
                 -- x2bgr10: a 10-bit output format is required to actually
                 -- carry the enhanced range out of the filter.
@@ -300,7 +381,12 @@ local function apply_combined(crop_meta)
     local function report(cropped)
         if vsr_applied_now or hdr_applied_now then
             local parts = {}
-            if vsr_applied_now then table.insert(parts, scale .. "x upscale") end
+            -- Two decimals: the scale is no longer quantised to 0.1, so
+            -- concatenating the raw float would put "1.7909090909091x" on
+            -- the OSD.
+            if vsr_applied_now then
+                table.insert(parts, string.format("%.2fx upscale", scale))
+            end
             if hdr_applied_now then table.insert(parts, "RTX HDR") end
             mp.osd_message("NVIDIA " .. table.concat(parts, " + ")
                 .. (cropped and " (cropped)" or ""), 2)
@@ -382,13 +468,27 @@ local function finish_detection()
         local x = tonumber(metadata["lavfi.cropdetect.x"])
         local y = tonumber(metadata["lavfi.cropdetect.y"])
 
-        local is_effective = w and h and x and y and
+        -- Positive-dimension check first, and on its own. cropdetect over
+        -- an all-black sample window returns a degenerate rectangle with
+        -- NEGATIVE width/height (measured on a 1920x1080 source whose first
+        -- five seconds are black: w=-1918 h=-1078 x=1920 y=1080). The
+        -- min-ratio test below happens to reject that too, but only by
+        -- accident of -1918 being less than half of 1920 -- which makes
+        -- detect_min_ratio load-bearing for correctness while
+        -- vsr_autocrop.conf presents it as a taste knob. Tune that option
+        -- toward 0 and a negative rectangle would reach set_scaled_crop().
+        local is_valid = w and h and x and y and w > 0 and h > 0
+                         and x >= 0 and y >= 0
+        local is_effective = is_valid and
             (x > 0 or y > 0 or w < raw_width or h < raw_height)
         local is_excessive = is_effective and
             (w < raw_width * options.detect_min_ratio or h < raw_height * options.detect_min_ratio)
 
         if is_effective and not is_excessive then
             crop_meta = { w = w, h = h, x = x, y = y }
+        elseif not is_valid then
+            mp.msg.info("cropdetect returned a degenerate rectangle "
+                .. "(sample window was probably all black).")
         elseif is_excessive then
             mp.msg.info("Crop area too large, skipping (try lowering detect_min_ratio).")
         end
@@ -396,7 +496,33 @@ local function finish_detection()
         mp.msg.warn("No cropdetect data -- was the filter inserted successfully?")
     end
 
+    -- Apply now regardless: VSR should not wait on a crop retry, and if a
+    -- later attempt does find bars, apply_combined() re-inserts @vsr with
+    -- the corrected scale anyway.
     apply_combined(crop_meta)
+
+    -- Nothing usable this time -- try again later in the file, where the
+    -- picture is more likely to be representative than it was during the
+    -- opening titles. Note this also retries the "no bars detected" case:
+    -- a film that opens on a full-frame studio logo before settling into
+    -- 2.39:1 reports an entirely legitimate-looking "no crop needed" on
+    -- the first pass, and that is exactly the case worth re-checking.
+    if not crop_meta and options.auto_crop then
+        crop_attempt = crop_attempt + 1
+        local delay = retry_delays[crop_attempt]
+        if delay then
+            kill_timer("retry")
+            timers.retry = mp.add_timeout(delay, function()
+                timers.retry = nil
+                mp.msg.info(string.format("re-running crop detection (attempt %d of %d)",
+                                          crop_attempt + 1, #retry_delays + 1))
+                begin_evaluation()
+            end)
+        else
+            mp.msg.info("crop detection gave up after "
+                .. (#retry_delays + 1) .. " attempts; playing uncropped.")
+        end
+    end
 end
 
 -- Inserts the cropdetect filter and starts the detection timer. No hwdec
@@ -425,7 +551,9 @@ local function start_detection()
     timers.detect_crop = mp.add_timeout(options.detect_seconds, finish_detection)
 end
 
-local function begin_evaluation()
+-- Assigns the forward-declared local above; must not re-introduce `local`
+-- here or finish_detection()'s reference would still see nil.
+function begin_evaluation()
     if applying then return end
 
     if options.auto_crop then
@@ -497,6 +625,20 @@ mp.register_event("end-file", clear_all)
 -- Re-evaluate on video track switch mid-file (a different track can have
 -- a different resolution).
 mp.observe_property("vid", "native", schedule_evaluation)
+
+-- Re-evaluate when the window moves to a different display. Both the VSR
+-- scale factor and the crop rectangle derived from it are computed from
+-- display-width/display-height, and were previously read exactly once per
+-- file. This machine drives 3440x1440, 2560x1440 and 1920x1080 panels, and
+-- the fit-aware min() above gives materially different answers on each:
+-- 1080p 2.39:1 content wants 1.79x on the ultrawide and 1.33x on the
+-- 2560x1440. Dragging the window mid-film previously kept the old display's
+-- scale and a crop rectangle computed against it.
+--
+-- schedule_evaluation() routes through settle_delay, which also debounces
+-- the burst of property changes a drag between monitors produces.
+mp.observe_property("display-width", "native", schedule_evaluation)
+mp.observe_property("display-height", "native", schedule_evaluation)
 
 -- Re-apply if vf chain is externally cleared (e.g. user runs 'vf clr')
 -- but NOT when we're the ones changing it, and NOT on videos where VSR
