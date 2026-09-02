@@ -16,6 +16,7 @@
 --
 -- Results show as a list or a 4x3 thumbnail grid (script-opts view=list|grid,
 -- Tab toggles while open). Type to fuzzy-filter, Enter loads, Esc closes.
+-- Mouse: hover focuses a row/tile, left click loads it, wheel scrolls.
 
 local utils = require "mp.utils"
 local input = require "mp.input"
@@ -172,6 +173,7 @@ local function list_close()
     list.ov = nil
     list.gen = list.gen + 1
     grid_clear()
+    list.page, list.hit = nil, nil
     for _, k in ipairs(list.keys) do mp.remove_key_binding("browse-" .. k) end
     list.keys = {}
 end
@@ -274,6 +276,8 @@ local function draw_list(W, H)
     if n == 0 then lines[#lines + 1] = colored(C_DIM, "  no match") end
     if last < n then lines[#lines + 1] = colored(C_DIM, string.format("  … %d more", n - last)) end
     -- ~22px per line at fs22 in a 720-high window
+    list.hit = {mode = "list", x0 = 20 * s, x1 = W - 20 * s, y0 = 42 * s, lh = 22 * s,
+                first = first, count = last - first + 1}
     list.ov.data = backdrop(10 * s, 10 * s, W - 20 * s, (#lines * 22 + 20) * s) .. "\n" ..
         string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord1\\3c&H%s&\\shad0}%s",
                       math.floor(20 * s), math.floor(20 * s), math.floor(22 * s), C_BACK,
@@ -295,6 +299,8 @@ local function draw_grid(W, H)
     local n = #list.view
     local first = math.floor((list.cursor - 1) / GRID_PAGE) * GRID_PAGE + 1
     local last = math.min(n, first + GRID_PAGE - 1)
+    list.hit = {mode = "grid", m = m, top = top, tw = tw, th = th, cell_h = cell_h,
+                first = first, count = last - first + 1}
     local ev = {backdrop(0, 0, W, top + GRID_ROWS * cell_h),
                 string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord1\\3c&H%s&\\shad0}%s",
                               m, m, hfs, C_BACK, header_text())}
@@ -340,9 +346,14 @@ end
 local function list_draw()
     if not list.ov then return end
     list.gen = list.gen + 1
-    grid_clear()
     local W, H = mp.get_property_number("osd-width", 0), mp.get_property_number("osd-height", 0)
     if H == 0 then W, H = 1280, 720 end -- no window yet (idle)
+    -- keep the bitmaps when only the focus moved within the same grid page
+    -- (overlay-add replaces an id in place); clear them on any other change
+    local page = list.mode == "grid" and
+        string.format("%d/%dx%d", math.floor((list.cursor - 1) / GRID_PAGE), W, H) or "list"
+    if page ~= list.page then grid_clear() end
+    list.page = page
     list.ov.res_x, list.ov.res_y = W, H
     if list.mode == "grid" then draw_grid(W, H) else draw_list(W, H) end
     list.ov:update()
@@ -350,6 +361,45 @@ end
 
 -- redraw on resize / fullscreen so bitmaps and text stay aligned
 mp.observe_property("osd-dimensions", "native", function() list_draw() end)
+
+-- window pixel -> view index of the row/tile under it, or nil
+local function hit_test(x, y)
+    local h = list.hit
+    if not h or not x then return nil end
+    local k
+    if h.mode == "grid" then
+        local col = math.floor((x - h.m) / (h.tw + h.m))
+        local row = math.floor((y - h.top) / h.cell_h)
+        local in_x = x >= h.m + col * (h.tw + h.m) and x < h.m + col * (h.tw + h.m) + h.tw
+        if col < 0 or col >= GRID_COLS or row < 0 or row >= GRID_ROWS or not in_x then return nil end
+        k = row * GRID_COLS + col
+    else
+        if x < h.x0 or x > h.x1 or y < h.y0 then return nil end
+        k = math.floor((y - h.y0) / h.lh)
+    end
+    if k < 0 or k >= h.count then return nil end
+    return h.first + k
+end
+
+local function activate()
+    local row = list.view[list.cursor]
+    if not row then return end
+    local e = list.entries[row.i]
+    local url = e.url or e.webpage_url
+    list_close()
+    mp.commandv("loadfile", url, "replace")
+    mp.osd_message("Loading: " .. (e.title or url), 3)
+end
+
+-- hover moves the focus
+mp.observe_property("mouse-pos", "native", function(_, pos)
+    if not list.ov or not pos or not pos.hover then return end
+    local i = hit_test(pos.x, pos.y)
+    if i and i ~= list.cursor then
+        list.cursor = i
+        list_draw()
+    end
+end)
 
 local function list_move(delta)
     local n = #list.view
@@ -407,14 +457,15 @@ local function show_results(prompt, entries)
             list_filter()
             list_draw()
         end,
-        ENTER = function()
-            local row = list.view[list.cursor]
-            if not row then return end
-            local e = list.entries[row.i]
-            local url = e.url or e.webpage_url
-            list_close()
-            mp.commandv("loadfile", url, "replace")
-            mp.osd_message("Loading: " .. (e.title or url), 3)
+        ENTER = activate,
+        -- click on the hovered row/tile loads it; clicks elsewhere do nothing
+        MBTN_LEFT = function()
+            local pos = mp.get_property_native("mouse-pos")
+            local i = pos and hit_test(pos.x, pos.y)
+            if i then
+                list.cursor = i
+                activate()
+            end
         end,
     }
     for key, fn in pairs(bind) do
