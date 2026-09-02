@@ -125,7 +125,9 @@ local function show_results(prompt, entries)
     list.entries, list.cursor, list.prompt = entries, 1, prompt
     list.ov = mp.create_osd_overlay("ass-events")
     list.ov.res_y = 720
-    list.ov.res_x = 720 * mp.get_property_number("osd-width", 1280) / mp.get_property_number("osd-height", 720)
+    local w, h = mp.get_property_number("osd-width", 0), mp.get_property_number("osd-height", 0)
+    if h == 0 then w, h = 16, 9 end -- no window yet (idle): assume 16:9
+    list.ov.res_x = math.floor(720 * w / h)
     local bind = {
         UP = function() list_move(-1) end,     DOWN = function() list_move(1) end,
         WHEEL_UP = function() list_move(-1) end, WHEEL_DOWN = function() list_move(1) end,
