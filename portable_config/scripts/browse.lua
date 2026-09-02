@@ -54,11 +54,16 @@ end
 -- Result list. The builtin console picker (mp.input.select) escapes ASS tags,
 -- so it cannot color parts of an item. This is a minimal ASS-overlay list
 -- with the same keys: Up/Down/PgUp/PgDn/Home/End/wheel, Enter, Esc.
--- Colors are ASS &HBBGGRR&.
+-- Colors are Solarized Dark, written as ASS &HBBGGRR& (byte-reversed hex).
 -- ---------------------------------------------------------------------------
 
-local C_TITLE, C_DIM, C_CHANNEL, C_TIME, C_LIVE, C_FOCUS =
-    "FFFFFF", "999999", "FF8800", "00D7FF", "5050FF", "88FF00"
+local C_TITLE   = "A1A193" -- base1  #93a1a1
+local C_DIM     = "756E58" -- base01 #586e75
+local C_CHANNEL = "D28B26" -- blue   #268bd2
+local C_TIME    = "0089B5" -- yellow #b58900
+local C_LIVE    = "2F32DC" -- red    #dc322f
+local C_FOCUS   = "009985" -- green  #859900
+local C_BACK    = "362B00" -- base03 #002b36
 local ROWS = 18
 
 local function ass_escape(s)
@@ -105,8 +110,8 @@ local function list_draw()
     -- backdrop (own event) then text; ~22px per line at fs22 in a 720-high canvas
     local w, h = list.ov.res_x - 20, #lines * 22 + 20
     list.ov.data = string.format(
-        "{\\an7\\pos(10,10)\\1c&H000000&\\1a&H50&\\bord0\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}\n" ..
-        "{\\an7\\pos(20,20)\\fs22\\bord1\\shad0}%s", w, w, h, h, table.concat(lines, "\\N"))
+        "{\\an7\\pos(10,10)\\1c&H" .. C_BACK .. "&\\1a&H40&\\bord0\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}\n" ..
+        "{\\an7\\pos(20,20)\\fs22\\bord1\\3c&H" .. C_BACK .. "&\\shad0}%s", w, w, h, h, table.concat(lines, "\\N"))
     list.ov:update()
 end
 
