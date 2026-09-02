@@ -23,6 +23,7 @@ Read `CLAUDE.md` rules first: no AI attribution in commits, never push, `uv`/`bu
 8. Backups of every touched file: `backup_2026-09-01/` (gitignored).
 9. Research notes with sources: `doc/research-rtx-vsr-vs-shaders.md` (has a measured addendum), `doc/research-osc-modernz-vs-uosc.md`.
 10. **Twitch 1440p** (2026-09-02): Twitch withholds the 1440p60 Source (HEVC) rendition from anonymous requests. mpv.conf `ytdl-raw-options-append=cookies-from-browser=firefox:<Zen twilight profile>` reads the Twitch login cookie from the Zen browser. Verified 2560x1440 HEVC in mpv. Breaks silently (back to 1080p) if the Zen profile moves or the user logs out of Twitch there.
+11. **browse.lua** (2026-09-02): YouTube search + account feeds (subs/history/watch later/home) via yt-dlp `ytsearchN:` and `:ytsubs` etc, shown with `mp.input.select`. Menu: Open > YouTube; key Ctrl+y. Search verified end to end. **Feeds return empty**: yt-dlp says the YouTube cookies read live from Zen are "no longer valid... rotated". Fix per yt-dlp wiki is a cookies.txt exported from a private window (user step, pending). Twitch part of browse.lua not started.
 
 ## Verification method that worked
 
