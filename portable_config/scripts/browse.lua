@@ -50,18 +50,70 @@ local function fmt_duration(s)
     return string.format("%d:%02d", s / 60, s % 60)
 end
 
-local function label(e)
+-- ---------------------------------------------------------------------------
+-- Result list. The builtin console picker (mp.input.select) escapes ASS tags,
+-- so it cannot color parts of an item. This is a minimal ASS-overlay list
+-- with the same keys: Up/Down/PgUp/PgDn/Home/End/wheel, Enter, Esc.
+-- Colors are ASS &HBBGGRR&.
+-- ---------------------------------------------------------------------------
+
+local C_TITLE, C_DIM, C_CHANNEL, C_TIME, C_LIVE, C_FOCUS =
+    "FFFFFF", "999999", "FF8800", "00D7FF", "5050FF", "88FF00"
+local ROWS = 18
+
+local function ass_escape(s)
+    return (s:gsub("[\\{}\n]", {["\\"] = "\\\239\187\191", ["{"] = "\\{",
+                                ["}"] = "\\}", ["\n"] = " "}))
+end
+
+local function colored(color, text)
+    return string.format("{\\1c&H%s&}%s", color, ass_escape(text))
+end
+
+local function label(e, focused)
     local who = e.channel or e.uploader or ""
-    local extra
+    local parts = {colored(focused and C_FOCUS or C_TITLE, e.title or e.url)}
+    if who ~= "" then parts[#parts + 1] = colored(C_CHANNEL, "[" .. who .. "]") end
     if e.live_status == "is_live" then
-        extra = "LIVE"
-    else
-        extra = fmt_duration(e.duration)
+        parts[#parts + 1] = colored(C_LIVE, "LIVE")
+    elseif e.duration then
+        parts[#parts + 1] = colored(C_TIME, "(" .. fmt_duration(e.duration) .. ")")
     end
-    local parts = {e.title or e.url}
-    if who ~= "" then parts[#parts + 1] = "[" .. who .. "]" end
-    if extra ~= "" then parts[#parts + 1] = "(" .. extra .. ")" end
     return table.concat(parts, "  ")
+end
+
+local list = {ov = nil, entries = {}, cursor = 1, prompt = ""}
+
+local function list_close()
+    if not list.ov then return end
+    list.ov:remove()
+    list.ov = nil
+    for _, k in ipairs(list.keys) do mp.remove_key_binding("browse-" .. k) end
+end
+
+local function list_draw()
+    local n = #list.entries
+    local first = math.max(1, math.min(list.cursor - math.floor(ROWS / 2), n - ROWS + 1))
+    local last = math.min(n, first + ROWS - 1)
+    local lines = {string.format("{\\b1}%s{\\b0}  %s", colored(C_TITLE, list.prompt),
+                                 colored(C_DIM, string.format("%d/%d", list.cursor, n)))}
+    for i = first, last do
+        local focused = i == list.cursor
+        lines[#lines + 1] = (focused and colored(C_FOCUS, "▸ ") or "  ") .. label(list.entries[i], focused)
+    end
+    if last < n then lines[#lines + 1] = colored(C_DIM, string.format("  … %d more", n - last)) end
+    -- backdrop (own event) then text; ~22px per line at fs22 in a 720-high canvas
+    local w, h = list.ov.res_x - 20, #lines * 22 + 20
+    list.ov.data = string.format(
+        "{\\an7\\pos(10,10)\\1c&H000000&\\1a&H50&\\bord0\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}\n" ..
+        "{\\an7\\pos(20,20)\\fs22\\bord1\\shad0}%s", w, w, h, h, table.concat(lines, "\\N"))
+    list.ov:update()
+end
+
+local function list_move(delta)
+    local n = #list.entries
+    list.cursor = math.max(1, math.min(n, list.cursor + delta))
+    list_draw()
 end
 
 local function show_results(prompt, entries)
@@ -69,18 +121,31 @@ local function show_results(prompt, entries)
         mp.osd_message("browse: no results", 3)
         return
     end
-    local items = {}
-    for i, e in ipairs(entries) do items[i] = label(e) end
-    input.select({
-        prompt = prompt,
-        items = items,
-        submit = function(i)
-            local e = entries[i]
+    list_close()
+    list.entries, list.cursor, list.prompt = entries, 1, prompt
+    list.ov = mp.create_osd_overlay("ass-events")
+    list.ov.res_y = 720
+    list.ov.res_x = 720 * mp.get_property_number("osd-width", 1280) / mp.get_property_number("osd-height", 720)
+    local bind = {
+        UP = function() list_move(-1) end,     DOWN = function() list_move(1) end,
+        WHEEL_UP = function() list_move(-1) end, WHEEL_DOWN = function() list_move(1) end,
+        PGUP = function() list_move(-ROWS) end, PGDWN = function() list_move(ROWS) end,
+        HOME = function() list_move(-math.huge) end, END = function() list_move(math.huge) end,
+        ESC = list_close, MBTN_RIGHT = list_close,
+        ENTER = function()
+            local e = list.entries[list.cursor]
             local url = e.url or e.webpage_url
+            list_close()
             mp.commandv("loadfile", url, "replace")
             mp.osd_message("Loading: " .. (e.title or url), 3)
         end,
-    })
+    }
+    list.keys = {}
+    for key, fn in pairs(bind) do
+        list.keys[#list.keys + 1] = key
+        mp.add_forced_key_binding(key, "browse-" .. key, fn, {repeatable = true})
+    end
+    list_draw()
 end
 
 local function fetch(prompt, url)
