@@ -146,7 +146,7 @@ end
 local list = {ov = nil, entries = {}, view = {}, cursor = 1, prompt = "", filter = "",
               mode = "list", gen = 0, keys = {}}
 
-local opts = {view = "list", twitch_channels = ""}
+local opts = {view = "list", twitch_channels = "", thumb_cache_days = 7}
 require("mp.options").read_options(opts, "browse")
 list.mode = opts.view == "grid" and "grid" or "list"
 
@@ -162,6 +162,22 @@ local function ffmpeg_path()
     if utils.file_info(p) then return p end
     return "ffmpeg"
 end
+
+-- Drop cached thumbnails not touched for thumb_cache_days. Runs once per mpv
+-- start; ~500 KB per page of 12, so a week of heavy use stays well under
+-- 100 MB. ponytail: age-based only, add a size cap if that ever matters.
+local function thumb_cache_cleanup()
+    local files = utils.readdir(THUMB_DIR, "files")
+    if not files then return end
+    local cutoff, removed = os.time() - opts.thumb_cache_days * 86400, 0
+    for _, f in ipairs(files) do
+        local path = THUMB_DIR .. "\\" .. f
+        local info = utils.file_info(path)
+        if info and info.mtime < cutoff and os.remove(path) then removed = removed + 1 end
+    end
+    if removed > 0 then mp.msg.info(string.format("removed %d stale thumbnails", removed)) end
+end
+thumb_cache_cleanup()
 
 local function grid_clear()
     for id = 1, GRID_PAGE do mp.commandv("overlay-remove", id) end
