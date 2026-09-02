@@ -22,6 +22,7 @@ Read `CLAUDE.md` rules first: no AI attribution in commits, never push, `uv`/`bu
 7. `deband=yes` globally. `watch-later-options-remove` now also covers `af`, `deinterlace`. `priority=high`, `force-seekable=yes` removed. `4k-Downscaling` profile-cond nil-guarded. modernz `tick_delay_follow_display_fps=yes`.
 8. Backups of every touched file: `backup_2026-09-01/` (gitignored).
 9. Research notes with sources: `doc/research-rtx-vsr-vs-shaders.md` (has a measured addendum), `doc/research-osc-modernz-vs-uosc.md`.
+10. **Twitch 1440p** (2026-09-02): Twitch withholds the 1440p60 Source (HEVC) rendition from anonymous requests. mpv.conf `ytdl-raw-options-append=cookies-from-browser=firefox:<Zen twilight profile>` reads the Twitch login cookie from the Zen browser. Verified 2560x1440 HEVC in mpv. Breaks silently (back to 1080p) if the Zen profile moves or the user logs out of Twitch there.
 
 ## Verification method that worked
 
