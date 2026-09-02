@@ -13,6 +13,9 @@
 --   browse/youtube-home            :ytrec
 --   browse/twitch-search           prompt for a query, list live channels
 --   browse/twitch-live             live status of script-opts twitch_channels
+--
+-- Results show as a list or a 4x3 thumbnail grid (script-opts view=list|grid,
+-- Tab toggles while open). Type to fuzzy-filter, Enter loads, Esc closes.
 
 local utils = require "mp.utils"
 local input = require "mp.input"
@@ -137,13 +140,90 @@ end
 
 -- entries: all results; view: {entry index, matched set} rows that pass the
 -- filter, best (tightest) match first; cursor indexes into view.
-local list = {ov = nil, entries = {}, view = {}, cursor = 1, prompt = "", filter = ""}
+-- mode: "list" or "grid" (opts.view picks the initial one, Tab toggles).
+-- gen: bumped on every redraw/close so late thumbnail fetches are dropped.
+local list = {ov = nil, entries = {}, view = {}, cursor = 1, prompt = "", filter = "",
+              mode = "list", gen = 0, keys = {}}
+
+local opts = {view = "list", twitch_channels = ""}
+require("mp.options").read_options(opts, "browse")
+list.mode = opts.view == "grid" and "grid" or "list"
+
+-- Grid: thumbnails are bitmaps via overlay-add (the only way to draw images
+-- on the OSD), fetched and scaled by the repo's ffmpeg.exe straight from the
+-- thumbnail URL into raw BGRA files cached under %TEMP%.
+local GRID_COLS, GRID_ROWS = 4, 3
+local GRID_PAGE = GRID_COLS * GRID_ROWS
+local THUMB_DIR = (os.getenv("TEMP") or ".") .. "\\mpv-browse-thumbs"
+
+local function ffmpeg_path()
+    local p = mp.command_native({"expand-path", "~~exe_dir/ffmpeg.exe"})
+    if utils.file_info(p) then return p end
+    return "ffmpeg"
+end
+
+local function grid_clear()
+    for id = 1, GRID_PAGE do mp.commandv("overlay-remove", id) end
+end
 
 local function list_close()
     if not list.ov then return end
     list.ov:remove()
     list.ov = nil
+    list.gen = list.gen + 1
+    grid_clear()
     for _, k in ipairs(list.keys) do mp.remove_key_binding("browse-" .. k) end
+    list.keys = {}
+end
+
+-- Smallest thumbnail at least `w` wide, else the largest available.
+local function thumb_url(e, w)
+    if e.thumbnail then return e.thumbnail end
+    local best
+    for _, t in ipairs(e.thumbnails or {}) do
+        local tw, bw = t.width or 0, best and (best.width or 0)
+        if not best or (bw < w and tw > bw) or (tw >= w and tw < bw) then best = t end
+    end
+    return best and best.url
+end
+
+local function djb2(s)
+    local h = 5381
+    for i = 1, #s do h = (h * 33 + s:byte(i)) % 4294967296 end
+    return string.format("%08x", h)
+end
+
+-- Download with Windows' curl (schannel, has the system CA store; the static
+-- ffmpeg build cannot verify TLS certificates), then scale/pad with ffmpeg.
+local function ensure_thumb(url, w, h, cb)
+    local base = string.format("%s\\%s_%dx%d", THUMB_DIR, djb2(url), w, h)
+    local file, img = base .. ".bgra", base .. ".img"
+    if utils.file_info(file) then return cb(file) end
+    local function fail(step, res)
+        mp.msg.warn(string.format("thumbnail %s failed: %s %s", step, url, res and res.stderr or ""))
+    end
+    mp.command_native_async({
+        name = "subprocess", playback_only = false, capture_stderr = true,
+        args = {"curl", "-s", "-S", "-L", "--max-time", "10", "-o", img, url},
+    }, function(ok, res)
+        if not (ok and res.status == 0) then return fail("download", res) end
+        mp.command_native_async({
+            name = "subprocess", playback_only = false, capture_stderr = true,
+            args = {ffmpeg_path(), "-y", "-loglevel", "error", "-i", img,
+                    "-vf", string.format("scale=%d:%d:force_original_aspect_ratio=decrease," ..
+                                         "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=0x002b36", w, h, w, h),
+                    "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "bgra", file},
+        }, function(ok2, res2)
+            os.remove(img)
+            if ok2 and res2.status == 0 and utils.file_info(file) then cb(file) else fail("convert", res2) end
+        end)
+    end)
+end
+
+local function truncate(s, max_chars)
+    local cs = chars(s)
+    if #cs <= max_chars then return s end
+    return table.concat(cs, "", 1, math.max(1, max_chars - 1)) .. "…"
 end
 
 local function list_filter()
@@ -160,16 +240,31 @@ local function list_filter()
     list.cursor = 1
 end
 
-local function list_draw()
+local function header_text()
+    local n = #list.view
+    local h = string.format("{\\b1}%s{\\b0}  %s", colored(C_TITLE, list.prompt),
+                            colored(C_DIM, string.format("%d/%d", math.min(list.cursor, n), n)))
+    if list.filter ~= "" then
+        h = h .. "  " .. colored(C_DIM, "> ") .. colored(C_MATCH, list.filter) .. colored(C_DIM, "_")
+    end
+    return h .. "  " .. colored(C_DIM, list.mode == "grid" and "[Tab: list]" or "[Tab: grid]")
+end
+
+local function backdrop(x, y, w, h)
+    x, y, w, h = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
+    return string.format("{\\an7\\pos(%d,%d)\\1c&H%s&\\1a&H40&\\bord0\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}",
+                         x, y, C_BACK, w, w, h, h)
+end
+
+-- Both renderers work in window pixels (the canvas is set to osd-width x
+-- osd-height) so ASS text and overlay-add bitmaps share one coordinate
+-- space. s = scale relative to a 720-high window.
+local function draw_list(W, H)
+    local s = H / 720
     local n = #list.view
     local first = math.max(1, math.min(list.cursor - math.floor(ROWS / 2), n - ROWS + 1))
     local last = math.min(n, first + ROWS - 1)
-    local header = string.format("{\\b1}%s{\\b0}  %s", colored(C_TITLE, list.prompt),
-                                 colored(C_DIM, string.format("%d/%d", math.min(list.cursor, n), n)))
-    if list.filter ~= "" then
-        header = header .. "  " .. colored(C_DIM, "> ") .. colored(C_MATCH, list.filter) .. colored(C_DIM, "_")
-    end
-    local lines = {header}
+    local lines = {header_text()}
     for i = first, last do
         local focused = i == list.cursor
         local row = list.view[i]
@@ -178,18 +273,96 @@ local function list_draw()
     end
     if n == 0 then lines[#lines + 1] = colored(C_DIM, "  no match") end
     if last < n then lines[#lines + 1] = colored(C_DIM, string.format("  … %d more", n - last)) end
-    -- backdrop (own event) then text; ~22px per line at fs22 in a 720-high canvas
-    local w, h = list.ov.res_x - 20, #lines * 22 + 20
-    list.ov.data = string.format(
-        "{\\an7\\pos(10,10)\\1c&H" .. C_BACK .. "&\\1a&H40&\\bord0\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}\n" ..
-        "{\\an7\\pos(20,20)\\fs22\\bord1\\3c&H" .. C_BACK .. "&\\shad0}%s", w, w, h, h, table.concat(lines, "\\N"))
+    -- ~22px per line at fs22 in a 720-high window
+    list.ov.data = backdrop(10 * s, 10 * s, W - 20 * s, (#lines * 22 + 20) * s) .. "\n" ..
+        string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord1\\3c&H%s&\\shad0}%s",
+                      math.floor(20 * s), math.floor(20 * s), math.floor(22 * s), C_BACK,
+                      table.concat(lines, "\\N"))
+end
+
+local function draw_grid(W, H)
+    local s = H / 720
+    local m, fs, top = math.floor(16 * s), math.floor(15 * s), math.floor(44 * s)
+    local hfs = math.floor(20 * s)
+    -- tile width from the window width, capped so GRID_ROWS rows fit the height
+    local text_h = math.floor(fs * 2.8)
+    local tw = math.floor((W - m * (GRID_COLS + 1)) / GRID_COLS)
+    local th_max = math.floor((H - top - m) / GRID_ROWS) - text_h - m
+    tw = math.min(tw, math.floor(th_max * 16 / 9))
+    local th = math.floor(tw * 9 / 16)
+    local cell_h = th + text_h + m
+    local max_chars = math.floor(tw / (fs * 0.52))
+    local n = #list.view
+    local first = math.floor((list.cursor - 1) / GRID_PAGE) * GRID_PAGE + 1
+    local last = math.min(n, first + GRID_PAGE - 1)
+    local ev = {backdrop(0, 0, W, top + GRID_ROWS * cell_h),
+                string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord1\\3c&H%s&\\shad0}%s",
+                              m, m, hfs, C_BACK, header_text())}
+    if n == 0 then
+        ev[#ev + 1] = string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord1\\3c&H%s&\\shad0}%s",
+                                    m, top, hfs, C_BACK, colored(C_DIM, "no match"))
+    end
+    local gen = list.gen
+    for i = first, last do
+        local k = i - first
+        local x = m + (k % GRID_COLS) * (tw + m)
+        local y = top + math.floor(k / GRID_COLS) * cell_h
+        local row = list.view[i]
+        local e = list.entries[row.i]
+        local focused = i == list.cursor
+        if focused then
+            ev[#ev + 1] = string.format(
+                "{\\an7\\pos(%d,%d)\\1a&HFF&\\3c&H%s&\\bord%d\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}",
+                x, y, C_FOCUS, math.max(2, math.floor(3 * s)), tw, tw, th, th)
+        end
+        local title, who = e.title or e.url, e.channel or e.uploader or ""
+        local line2 = colored(C_CHANNEL, truncate(who, max_chars - 8))
+        if e.live_status == "is_live" then
+            line2 = line2 .. "  " .. colored(C_LIVE, "LIVE")
+        elseif e.duration then
+            line2 = line2 .. "  " .. colored(C_TIME, fmt_duration(e.duration))
+        end
+        ev[#ev + 1] = string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord1\\3c&H%s&\\shad0\\q2}%s\\N%s",
+                                    x, y + th + math.floor(3 * s), fs, C_BACK,
+                                    render(truncate(title, max_chars), focused and C_FOCUS or C_TITLE, 0, row.matched),
+                                    line2)
+        local url = thumb_url(e, tw)
+        if url then
+            ensure_thumb(url, tw, th, function(file)
+                if list.gen ~= gen then return end -- list redrawn or closed meanwhile
+                mp.commandv("overlay-add", k + 1, x, y, file, 0, "bgra", tw, th, tw * 4)
+            end)
+        end
+    end
+    list.ov.data = table.concat(ev, "\n")
+end
+
+local function list_draw()
+    if not list.ov then return end
+    list.gen = list.gen + 1
+    grid_clear()
+    local W, H = mp.get_property_number("osd-width", 0), mp.get_property_number("osd-height", 0)
+    if H == 0 then W, H = 1280, 720 end -- no window yet (idle)
+    list.ov.res_x, list.ov.res_y = W, H
+    if list.mode == "grid" then draw_grid(W, H) else draw_list(W, H) end
     list.ov:update()
 end
+
+-- redraw on resize / fullscreen so bitmaps and text stay aligned
+mp.observe_property("osd-dimensions", "native", function() list_draw() end)
 
 local function list_move(delta)
     local n = #list.view
     list.cursor = math.max(1, math.min(n, list.cursor + delta))
     list_draw()
+end
+
+-- step sizes differ per mode: in the grid Up/Down move a row, PgUp/PgDn a page
+local function step(kind)
+    if list.mode == "grid" then
+        return ({row = GRID_COLS, page = GRID_PAGE})[kind]
+    end
+    return ({row = 1, page = ROWS})[kind]
 end
 
 local function show_results(prompt, entries)
@@ -199,18 +372,27 @@ local function show_results(prompt, entries)
     end
     list_close()
     list.entries, list.prompt, list.filter = entries, prompt, ""
+    if list.mode == "grid" and not utils.file_info(THUMB_DIR) then
+        mp.command_native({name = "subprocess", playback_only = false,
+                           args = {"cmd", "/c", "mkdir", THUMB_DIR}})
+    end
     list_filter()
     list.ov = mp.create_osd_overlay("ass-events")
-    list.ov.res_y = 720
-    local w, h = mp.get_property_number("osd-width", 0), mp.get_property_number("osd-height", 0)
-    if h == 0 then w, h = 16, 9 end -- no window yet (idle): assume 16:9
-    list.ov.res_x = math.floor(720 * w / h)
     local bind = {
-        UP = function() list_move(-1) end,     DOWN = function() list_move(1) end,
-        WHEEL_UP = function() list_move(-1) end, WHEEL_DOWN = function() list_move(1) end,
-        PGUP = function() list_move(-ROWS) end, PGDWN = function() list_move(ROWS) end,
-        HOME = function() list_move(-math.huge) end, END = function() list_move(math.huge) end,
+        UP = function() list_move(-step("row")) end,   DOWN = function() list_move(step("row")) end,
+        LEFT = function() list_move(-1) end,           RIGHT = function() list_move(1) end,
+        WHEEL_UP = function() list_move(-step("row")) end, WHEEL_DOWN = function() list_move(step("row")) end,
+        PGUP = function() list_move(-step("page")) end, PGDWN = function() list_move(step("page")) end,
+        HOME = function() list_move(-math.huge) end,   END = function() list_move(math.huge) end,
         MBTN_RIGHT = list_close,
+        TAB = function()
+            list.mode = list.mode == "grid" and "list" or "grid"
+            if list.mode == "grid" and not utils.file_info(THUMB_DIR) then
+                mp.command_native({name = "subprocess", playback_only = false,
+                                   args = {"cmd", "/c", "mkdir", THUMB_DIR}})
+            end
+            list_draw()
+        end,
         -- Esc clears an active filter first, closes on the second press
         ESC = function()
             if list.filter == "" then return list_close() end
@@ -235,7 +417,6 @@ local function show_results(prompt, entries)
             mp.osd_message("Loading: " .. (e.title or url), 3)
         end,
     }
-    list.keys = {}
     for key, fn in pairs(bind) do
         list.keys[#list.keys + 1] = key
         mp.add_forced_key_binding(key, "browse-" .. key, fn, {repeatable = true})
@@ -366,6 +547,7 @@ local function twitch_entry(user)
                   string.format(" %d viewers", s.viewersCount or 0),
         live_status = "is_live",
         url = "https://www.twitch.tv/" .. user.login,
+        thumbnail = s.previewImageURL,
     }
 end
 
@@ -384,9 +566,6 @@ end
 -- list is unreachable. The working route is a channel list in
 -- script-opts/browse.conf (twitch_channels=a,b,c) checked for live status.
 -- ponytail: swap for currentUser.followedLiveUsers if Twitch reopens it.
-local opts = {twitch_channels = ""}
-require("mp.options").read_options(opts, "browse")
-
 mp.add_key_binding(nil, "twitch-live", function()
     local logins = {}
     for l in opts.twitch_channels:gmatch("[^,%s]+") do logins[#logins + 1] = l:lower() end
@@ -398,7 +577,7 @@ mp.add_key_binding(nil, "twitch-live", function()
     twitch_gql(string.format([[
         query { users(logins: %s) {
             login displayName
-            stream { title viewersCount game { displayName } }
+            stream { title viewersCount game { displayName } previewImageURL(width: 640, height: 360) }
         } }]], utils.format_json(logins)),
         function(d) show_live(d.users) end)
 end)
@@ -414,7 +593,7 @@ mp.add_key_binding(nil, "twitch-search", function()
                 query { searchFor(userQuery: %s, platform: "web") {
                     channels { edges { item { ... on User {
                         login displayName
-                        stream { title viewersCount game { displayName } }
+                        stream { title viewersCount game { displayName } previewImageURL(width: 640, height: 360) }
                     } } } } } }]], utils.format_json(text)),
                 function(d)
                     local entries = {}
