@@ -63,6 +63,7 @@ local C_CHANNEL = "D28B26" -- blue   #268bd2
 local C_TIME    = "0089B5" -- yellow #b58900
 local C_LIVE    = "2F32DC" -- red    #dc322f
 local C_FOCUS   = "009985" -- green  #859900
+local C_MATCH   = "164BCB" -- orange #cb4b16 (filter-matched characters)
 local C_BACK    = "362B00" -- base03 #002b36
 local ROWS = 18
 
@@ -75,10 +76,57 @@ local function colored(color, text)
     return string.format("{\\1c&H%s&}%s", color, ass_escape(text))
 end
 
-local function label(e, focused)
-    local who = e.channel or e.uploader or ""
-    local parts = {colored(focused and C_FOCUS or C_TITLE, e.title or e.url)}
-    if who ~= "" then parts[#parts + 1] = colored(C_CHANNEL, "[" .. who .. "]") end
+-- UTF-8 aware split into characters (mpv's Lua is 5.1 / LuaJIT, no utf8 lib)
+local function chars(s)
+    local t = {}
+    for c in s:gmatch("[%z\1-\127\194-\244][\128-\191]*") do t[#t + 1] = c end
+    return t
+end
+
+-- Fuzzy match: every character of `needle` appears in `hay` in order
+-- (case-insensitive, ASCII case folding). Greedy leftmost. Returns the set
+-- of matched hay character indices and the span (last - first), or nil.
+local function fuzzy(hay, needle)
+    if #needle == 0 then return {}, 0 end
+    local matched, j, first, last = {}, 1, nil, nil
+    for i, c in ipairs(hay) do
+        if c:lower() == needle[j]:lower() then
+            matched[i] = true
+            first, last = first or i, i
+            j = j + 1
+            if j > #needle then return matched, last - first end
+        end
+    end
+    return nil
+end
+
+-- Render `text` in `color`, with hay chars from `offset` on highlighted when
+-- they are in `matched`. Runs of same-colored chars share one tag.
+local function render(text, color, offset, matched)
+    local out, cur = {}, nil
+    for i, c in ipairs(chars(text)) do
+        local col = matched[offset + i] and C_MATCH or color
+        if col ~= cur then
+            out[#out + 1] = string.format("{\\1c&H%s&}", col)
+            cur = col
+        end
+        out[#out + 1] = ass_escape(c)
+    end
+    return table.concat(out)
+end
+
+-- The string the filter matches against: "title channel"
+local function haystack(e)
+    return chars((e.title or e.url) .. " " .. (e.channel or e.uploader or ""))
+end
+
+local function label(e, focused, matched)
+    local title, who = e.title or e.url, e.channel or e.uploader or ""
+    local parts = {render(title, focused and C_FOCUS or C_TITLE, 0, matched)}
+    if who ~= "" then
+        parts[#parts + 1] = colored(C_CHANNEL, "[") ..
+            render(who, C_CHANNEL, #chars(title) + 1, matched) .. colored(C_CHANNEL, "]")
+    end
     if e.live_status == "is_live" then
         parts[#parts + 1] = colored(C_LIVE, "LIVE")
     elseif e.duration then
@@ -87,7 +135,9 @@ local function label(e, focused)
     return table.concat(parts, "  ")
 end
 
-local list = {ov = nil, entries = {}, cursor = 1, prompt = ""}
+-- entries: all results; view: {entry index, matched set} rows that pass the
+-- filter, best (tightest) match first; cursor indexes into view.
+local list = {ov = nil, entries = {}, view = {}, cursor = 1, prompt = "", filter = ""}
 
 local function list_close()
     if not list.ov then return end
@@ -96,16 +146,37 @@ local function list_close()
     for _, k in ipairs(list.keys) do mp.remove_key_binding("browse-" .. k) end
 end
 
+local function list_filter()
+    local needle = chars(list.filter)
+    list.view = {}
+    for i, e in ipairs(list.entries) do
+        local matched, span = fuzzy(haystack(e), needle)
+        if matched then list.view[#list.view + 1] = {i = i, matched = matched, span = span} end
+    end
+    table.sort(list.view, function(a, b)
+        if a.span ~= b.span then return a.span < b.span end
+        return a.i < b.i
+    end)
+    list.cursor = 1
+end
+
 local function list_draw()
-    local n = #list.entries
+    local n = #list.view
     local first = math.max(1, math.min(list.cursor - math.floor(ROWS / 2), n - ROWS + 1))
     local last = math.min(n, first + ROWS - 1)
-    local lines = {string.format("{\\b1}%s{\\b0}  %s", colored(C_TITLE, list.prompt),
-                                 colored(C_DIM, string.format("%d/%d", list.cursor, n)))}
+    local header = string.format("{\\b1}%s{\\b0}  %s", colored(C_TITLE, list.prompt),
+                                 colored(C_DIM, string.format("%d/%d", math.min(list.cursor, n), n)))
+    if list.filter ~= "" then
+        header = header .. "  " .. colored(C_DIM, "> ") .. colored(C_MATCH, list.filter) .. colored(C_DIM, "_")
+    end
+    local lines = {header}
     for i = first, last do
         local focused = i == list.cursor
-        lines[#lines + 1] = (focused and colored(C_FOCUS, "▸ ") or "  ") .. label(list.entries[i], focused)
+        local row = list.view[i]
+        lines[#lines + 1] = (focused and colored(C_FOCUS, "▸ ") or "  ") ..
+                            label(list.entries[row.i], focused, row.matched)
     end
+    if n == 0 then lines[#lines + 1] = colored(C_DIM, "  no match") end
     if last < n then lines[#lines + 1] = colored(C_DIM, string.format("  … %d more", n - last)) end
     -- backdrop (own event) then text; ~22px per line at fs22 in a 720-high canvas
     local w, h = list.ov.res_x - 20, #lines * 22 + 20
@@ -116,7 +187,7 @@ local function list_draw()
 end
 
 local function list_move(delta)
-    local n = #list.entries
+    local n = #list.view
     list.cursor = math.max(1, math.min(n, list.cursor + delta))
     list_draw()
 end
@@ -127,7 +198,8 @@ local function show_results(prompt, entries)
         return
     end
     list_close()
-    list.entries, list.cursor, list.prompt = entries, 1, prompt
+    list.entries, list.prompt, list.filter = entries, prompt, ""
+    list_filter()
     list.ov = mp.create_osd_overlay("ass-events")
     list.ov.res_y = 720
     local w, h = mp.get_property_number("osd-width", 0), mp.get_property_number("osd-height", 0)
@@ -138,9 +210,25 @@ local function show_results(prompt, entries)
         WHEEL_UP = function() list_move(-1) end, WHEEL_DOWN = function() list_move(1) end,
         PGUP = function() list_move(-ROWS) end, PGDWN = function() list_move(ROWS) end,
         HOME = function() list_move(-math.huge) end, END = function() list_move(math.huge) end,
-        ESC = list_close, MBTN_RIGHT = list_close,
+        MBTN_RIGHT = list_close,
+        -- Esc clears an active filter first, closes on the second press
+        ESC = function()
+            if list.filter == "" then return list_close() end
+            list.filter = ""
+            list_filter()
+            list_draw()
+        end,
+        BS = function()
+            local cs = chars(list.filter)
+            cs[#cs] = nil
+            list.filter = table.concat(cs)
+            list_filter()
+            list_draw()
+        end,
         ENTER = function()
-            local e = list.entries[list.cursor]
+            local row = list.view[list.cursor]
+            if not row then return end
+            local e = list.entries[row.i]
             local url = e.url or e.webpage_url
             list_close()
             mp.commandv("loadfile", url, "replace")
@@ -152,6 +240,19 @@ local function show_results(prompt, entries)
         list.keys[#list.keys + 1] = key
         mp.add_forced_key_binding(key, "browse-" .. key, fn, {repeatable = true})
     end
+    -- type to filter (fuzzy). ANY_UNICODE delivers printable text; SPACE is
+    -- a named key so it needs its own binding.
+    local function type_text(text)
+        list.filter = list.filter .. text
+        list_filter()
+        list_draw()
+    end
+    list.keys[#list.keys + 1] = "ANY_UNICODE"
+    mp.add_forced_key_binding("ANY_UNICODE", "browse-ANY_UNICODE", function(ev)
+        if ev.event ~= "up" and ev.key_text and ev.key_text ~= "" then type_text(ev.key_text) end
+    end, {complex = true, repeatable = true})
+    list.keys[#list.keys + 1] = "SPACE"
+    mp.add_forced_key_binding("SPACE", "browse-SPACE", function() type_text(" ") end, {repeatable = true})
     list_draw()
 end
 
