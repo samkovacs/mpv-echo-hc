@@ -100,7 +100,6 @@ MPV/
     │   ├── screenshotfolder_echostorm.lua← organized screenshots (Echostorm)
     │   ├── thumbfast.lua                 ← seekbar thumbnails
     │   ├── pause_indicator_lite.lua      ← pause overlay
-    │   ├── playlistmanager.lua           ← playlist OSD
     │   ├── open_file_echostorm.lua       ← native Windows open file/folder/URL/subtitle/audio dialogs (Echostorm: added folder, URL)
     │   ├── ytdlautoformat.lua            ← auto ytdl-format per domain (YouTube, Twitch, Kick)
     │   ├── chapterskip.lua               ← auto-skip OP/ED/preview chapters
@@ -115,7 +114,6 @@ MPV/
     │   ├── modernz.conf
     │   ├── thumbfast.conf
     │   ├── pause_indicator_lite.conf
-    │   ├── playlistmanager.conf
     │   ├── ytdlautoformat.conf
     │   ├── ytdl_hook.conf                ← pins ytdl_path to yt-dlp
     │   ├── vsr_autocrop.conf

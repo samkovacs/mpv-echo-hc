@@ -37,3 +37,5 @@ portable_config/watch_later/
 
 # Pre-git snapshot directories
 portable_config.backup-*/
+backup_*/
+portable_config/watch_history.jsonl
