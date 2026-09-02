@@ -258,3 +258,4 @@ be needed for 1080p60 anime), and whether `shader stats` confirms the
 - NNEDI3 nns32/nns64, RAVU-Zoom r3, FSRCNNX 8/16, Anime4K Restore+Clamp+Krig all compile and run on d3d11 at 1080p60 -> 2560x1440 with 0 dropped frames. NNEDI3 nns64 + adaptive-sharpen: ~3.4 ms/frame.
 - Consequence for the recommendation: on d3d11 use the ArtCNN **C4F16** variants (not on disk yet) or switch to `gpu-api=vulkan`. Interim: WEB-DL profile uses NNEDI3 nns64.
 - Confirmed the WHEN-gate claim empirically: with `@vsr` present, `vo-passes` lists no user-shader pass; with `glsl-shaders` set and vsr_autocrop skipping VSR, the hook dispatches.
+- Follow-up: Sirosky's `_CMP` compute builds of Ani4Kv2/AniSD also fail on d3d11 (`error X4586: group shared memory (41472 bytes) exceeds the cs_5_0 limit of 32768`). Upstream `ArtCNN_C4F16.glsl` and `ArtCNN_C4F16_DS.glsl` (Artoriuz) compile and run: 8 passes, ~3 ms/frame at 1080p60 -> 1440p, 0 drops. WEB-DL now uses C4F16 DS; C4F32 files removed.
