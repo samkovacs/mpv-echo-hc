@@ -112,7 +112,11 @@ local function effective_contrast(peak)
     return state.target_contrast
 end
 
-local function apply_hdr_settings()
+-- inverse: true for an SDR source being expanded to the HDR display via
+-- libplacebo's inverse tone mapping (mpv.conf sets inverse-tone-mapping=yes;
+-- this is what state.inverse_mapping records). The render target is the
+-- same HDR target either way; only the mapping direction differs.
+local function apply_hdr_settings(inverse)
     local peak = effective_peak()
     mp.set_property_native("icc-profile", "")
     mp.set_property_native("icc-profile-auto", false)
@@ -121,7 +125,7 @@ local function apply_hdr_settings()
     mp.set_property_native("target-peak", peak)
     mp.set_property_native("target-contrast", effective_contrast(peak))
     mp.set_property_native("target-colorspace-hint", "yes")
-    mp.set_property_native("inverse-tone-mapping", "no")
+    mp.set_property_native("inverse-tone-mapping", inverse and "yes" or "no")
 end
 
 local function apply_sdr_settings()
@@ -190,7 +194,12 @@ local function handle_sdr_logic(paused_before, target_peak, target_prim, target_
         end
         resume_if_needed(paused_before)
     elseif o.hdr_mode == "pass" and state.inverse_mapping then
-        reset_target_settings()
+        -- SDR source, display in HDR mode, inverse-tone-mapping=yes in
+        -- mpv.conf: point the render target at this display's measured
+        -- peak so libplacebo expands SDR into it. Safe to key on: target-*
+        -- changes do not alter video-out-params (only filters do), so the
+        -- "sdr" branch stays stable and check_paramet's is_hdr stays false.
+        apply_hdr_settings(true)
     end
 end
 

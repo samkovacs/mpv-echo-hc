@@ -351,7 +351,14 @@ local function apply_combined(crop_meta)
     -- Guard with an epsilon: a ratio of 1.0001 (content already at display
     -- size, off by a rounding step) is not worth a filter insert, and
     -- inserting @vsr at scale~=1 costs a full d3d11vpp pass for nothing.
-    local upscale_wanted = scale and scale > 1.01
+    --
+    -- A GLSL shader chain takes precedence over VSR. d3d11vpp runs before
+    -- the VO, so libplacebo sees VSR's output as the source; every upscaler
+    -- in shaders/ is gated on OUTPUT > LUMA (//!WHEN) and silently no-ops
+    -- once VSR has already scaled to display size. Stacking is impossible,
+    -- so whichever the user (or a profile) selected via glsl-shaders wins.
+    local shaders_active = (mp.get_property("glsl-shaders") or "") ~= ""
+    local upscale_wanted = scale and scale > 1.01 and not shaders_active
     local hdr_wanted = options.nvidia_true_hdr and source_is_sdr and
         vsr_supported_pixfmt and
         mp.get_property_native("user-data/display-info/hdr-status") == "on"
@@ -678,6 +685,10 @@ mp.observe_property("vid", "native", schedule_evaluation)
 -- the burst of property changes a drag between monitors produces.
 mp.observe_property("display-width", "native", schedule_evaluation)
 mp.observe_property("display-height", "native", schedule_evaluation)
+
+-- Re-evaluate when a shader profile is switched mid-file (shaders and @vsr
+-- are mutually exclusive, see apply_combined).
+mp.observe_property("glsl-shaders", "native", schedule_evaluation)
 
 -- Re-apply if vf chain is externally cleared (e.g. user runs 'vf clr')
 -- but NOT when we're the ones changing it, and NOT on videos where VSR
