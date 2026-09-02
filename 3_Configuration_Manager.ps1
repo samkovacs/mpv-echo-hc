@@ -116,7 +116,7 @@ $settings = @(
     @{ Group = "Video"; Label = "HDR display mode"; File = $hdrConf; Kind = "Enum"; Key = "hdr_mode"; Options = @("noth", "pass", "switch")
        Tooltip = "noth = do nothing. pass = pass HDR through when the display is already in HDR mode (no flicker risk). switch = auto-switch the display between HDR/SDR based on content (can flicker on some monitors)." }
     @{ Group = "Video"; Label = "Video sync"; File = $mpvConf; Kind = "Enum"; Key = "video-sync"; Options = @("display-resample", "audio")
-       Tooltip = "display-resample resamples audio to match display refresh for smoother motion. Switch to audio for live/HLS streams -- display-resample can cause issues there." }
+       Tooltip = "audio (default) is the measured choice on the 240 Hz panel: display-resample dropped frames on 4K HDR because each frame must fit inside one 4.2 ms refresh. display-resample only helps when refresh/fps is far from an integer (e.g. 60 Hz + 23.976)." }
 
     @{ Group = "Audio"; Label = "Prefer surround audio track"; File = $surroundConf; Kind = "Bool"; Key = "enabled"
        Tooltip = "On file load, auto-selects whichever audio track reports the highest channel count -- but only among tracks matching mpv's own language selection, never overriding it just for more channels." }
