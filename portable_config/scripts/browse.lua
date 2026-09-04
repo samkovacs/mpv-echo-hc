@@ -1,9 +1,11 @@
--- browse.lua: search YouTube and browse the signed-in account's feeds from
--- inside mpv, using the builtin console (mp.input) for text entry and the
--- same select menu that select.lua's History / Watch later entries use.
+-- browse.lua: search YouTube, Twitch and a user-configured torrent index
+-- from inside mpv, using the builtin console (mp.input) for text entry and
+-- the same select menu that select.lua's History / Watch later entries use.
 --
--- Everything goes through yt-dlp. Cookies come from mpv's own
--- ytdl-raw-options (mpv.conf), so there is one place to configure auth.
+-- YouTube goes through yt-dlp. Cookies come from mpv's own ytdl-raw-options
+-- (mpv.conf), so there is one place to configure auth. Torrents come from
+-- the RSS feeds in script-opts/browse.conf and play through the vendored
+-- webtorrent-mpv-hook (scripts/webtorrent.js) in memory mode.
 --
 -- Bindings (input.conf / menu.conf):
 --   browse/youtube-search          prompt for a query, list results
@@ -13,6 +15,9 @@
 --   browse/youtube-home            :ytrec
 --   browse/twitch-search           prompt for a query, list live channels
 --   browse/twitch-live             live status of script-opts twitch_channels
+--   browse/torrent-search          prompt for a query, list releases
+--   browse/torrent-new             newest releases on the index
+--   browse/torrent-followed        releases of script-opts torrent_shows
 --
 -- Results show as a list or a 4x3 thumbnail grid (script-opts view=list|grid,
 -- Tab toggles while open). Type to fuzzy-filter, Enter loads, Esc closes.
@@ -20,6 +25,9 @@
 
 local utils = require "mp.utils"
 local input = require "mp.input"
+-- mpv's require path is ~~/lua, not scripts/; the torrent module lives here
+package.path = debug.getinfo(1, "S").source:match("^@(.*)[/\\]") .. "/?.lua;" .. package.path
+local torrents = require "browse_torrents"
 
 local RESULTS = 30
 
@@ -156,9 +164,13 @@ end
 local list = {ov = nil, entries = {}, view = {}, cursor = 1, prompt = "", filter = "",
               mode = "list", gen = 0, keys = {}}
 
-local opts = {view = "list", twitch_channels = "", thumb_cache_days = 7}
+local opts = {view = "list", twitch_channels = "", thumb_cache_days = 7,
+              torrent_search_url = "", torrent_new_url = "", torrent_shows = ""}
 require("mp.options").read_options(opts, "browse")
 list.mode = opts.view == "grid" and "grid" or "list"
+-- menu.conf hides Open > Torrents on this while no index is configured
+mp.set_property_native("user-data/browse/torrents",
+                       opts.torrent_search_url ~= "" or opts.torrent_new_url ~= "")
 
 -- Grid: thumbnails are bitmaps via overlay-add (the only way to draw images
 -- on the OSD), fetched and scaled by the repo's ffmpeg.exe straight from the
@@ -310,6 +322,51 @@ local function draw_list(W, H)
                       table.concat(lines, "\\N"))
 end
 
+-- Show covers for the grid (Torrents source): one AniList search per show
+-- name, first hit's cover URL, cached on disk beside the thumbnails keyed
+-- by show name (an empty file means "no cover"). A wrong cover is cosmetic.
+local covers = {} -- show -> url, false (none), or "pending"
+local list_draw
+
+local function apply_cover(show, url)
+    covers[show] = url or false
+    for _, e in ipairs(list.entries) do
+        if e.show == show then e.thumbnail = url end
+    end
+    if url and list.ov and list.mode == "grid" then list_draw() end
+end
+
+local function ensure_cover(show)
+    if covers[show] ~= nil then return end
+    covers[show] = "pending"
+    local file = string.format("%s\\cover_%s.txt", THUMB_DIR, djb2(show))
+    local f = io.open(file, "r")
+    if f then
+        local url = f:read("*l")
+        f:close()
+        return apply_cover(show, url and url ~= "" and url or nil)
+    end
+    mp.command_native_async({
+        name = "subprocess", playback_only = false, capture_stdout = true, capture_stderr = true,
+        args = {"curl", "-s", "-S", "--max-time", "10", "https://graphql.anilist.co",
+                "-H", "Content-Type: application/json", "--data-binary", utils.format_json({
+                    query = "query($s:String){Page(perPage:1){media(search:$s,type:ANIME){coverImage{large}}}}",
+                    variables = {s = show}})},
+    }, function(ok, res)
+        local data = ok and res.status == 0 and utils.parse_json(res.stdout)
+        if not data then
+            mp.msg.warn(string.format("cover lookup failed: %s %s", show, res and res.stderr or ""))
+            covers[show] = nil -- retry on the next draw
+            return
+        end
+        local media = data.data and data.data.Page and data.data.Page.media
+        local url = media and media[1] and media[1].coverImage and media[1].coverImage.large
+        local out = io.open(file, "w")
+        if out then out:write(url or ""); out:close() end
+        apply_cover(show, url)
+    end)
+end
+
 local function draw_grid(W, H)
     local s = H / 720
     local m, fs, top = math.floor(16 * s), math.floor(15 * s), math.floor(44 * s)
@@ -358,6 +415,7 @@ local function draw_grid(W, H)
                                     x, y + th + math.floor(3 * s), fs, C_BACK,
                                     render(truncate(title, max_chars), focused and C_FOCUS or C_TITLE, 0, row.matched),
                                     line2)
+        if e.show and not e.thumbnail then ensure_cover(e.show) end
         local url = thumb_url(e, tw)
         if url then
             ensure_thumb(url, tw, th, function(file)
@@ -369,7 +427,7 @@ local function draw_grid(W, H)
     list.ov.data = table.concat(ev, "\n")
 end
 
-local function list_draw()
+function list_draw()
     if not list.ov then return end
     list.gen = list.gen + 1
     local W, H = mp.get_property_number("osd-width", 0), mp.get_property_number("osd-height", 0)
@@ -694,3 +752,82 @@ local feeds = {
 for _, f in ipairs(feeds) do
     mp.add_key_binding(nil, f[1], function() fetch("YouTube " .. f[2], f[3]) end)
 end
+
+-- ---------------------------------------------------------------------------
+-- Torrents. The index is whatever RSS feeds the user pasted into browse.conf
+-- (torrent_search_url with a {query} placeholder, torrent_new_url); the repo
+-- names none. Parsing and ordering live in browse_torrents.lua (pure Lua,
+-- unit test in docs/tests). Picking a release loads its magnet URL and
+-- webtorrent-mpv-hook streams it in memory.
+-- ---------------------------------------------------------------------------
+
+local function torrent_config_message()
+    mp.osd_message("browse: set torrent_search_url= and torrent_new_url= in script-opts/browse.conf", 8)
+end
+
+-- GET an index feed with curl. cb(entries), or cb(nil) after an OSD message
+-- when the request fails, times out or does not return RSS.
+local function fetch_feed(url, group, cb)
+    mp.command_native_async({
+        name = "subprocess", playback_only = false, capture_stdout = true, capture_stderr = true,
+        args = {"curl", "-s", "-S", "-L", "--fail-with-body", "--max-time", "20", url},
+    }, function(ok, res, err)
+        mp.osd_message("", 0)
+        if not ok or res.status ~= 0 then
+            local msg = (res and res.stderr or err or ""):gsub("%s+$", "")
+            mp.msg.error("index feed failed: " .. url .. " " .. msg)
+            mp.osd_message("browse: index feed failed\n" .. msg:sub(1, 300), 8)
+            return cb(nil)
+        end
+        local entries, perr = torrents.parse_feed(res.stdout, group)
+        if not entries then
+            mp.msg.error(perr .. ": " .. res.stdout:sub(1, 200))
+            mp.osd_message("browse: " .. perr, 8)
+            return cb(nil)
+        end
+        cb(entries)
+    end)
+end
+
+mp.add_key_binding(nil, "torrent-search", function()
+    if opts.torrent_search_url == "" then return torrent_config_message() end
+    input.get({
+        prompt = "Torrent search: ",
+        submit = function(text)
+            input.terminate()
+            if text:match("^%s*$") then return end
+            mp.osd_message("browse: searching index...", 30)
+            fetch_feed(torrents.search_url(opts.torrent_search_url, text), nil, function(entries)
+                if entries then show_results("Torrents: " .. text, torrents.order(entries)) end
+            end)
+        end,
+    })
+end)
+
+mp.add_key_binding(nil, "torrent-new", function()
+    if opts.torrent_new_url == "" then return torrent_config_message() end
+    mp.osd_message("browse: fetching new releases...", 30)
+    fetch_feed(opts.torrent_new_url, nil, function(entries)
+        if entries then show_results("Torrents: new releases", torrents.order(entries)) end
+    end)
+end)
+
+-- One search per followed show ("Show|Group" keeps only that release
+-- group), merged into one ordered list once every request has answered.
+mp.add_key_binding(nil, "torrent-followed", function()
+    if opts.torrent_search_url == "" then return torrent_config_message() end
+    local shows = torrents.shows(opts.torrent_shows)
+    if #shows == 0 then
+        mp.osd_message("browse: set torrent_shows=Show A|Group,Show B in script-opts/browse.conf", 8)
+        return
+    end
+    mp.osd_message("browse: checking followed shows...", 30)
+    local merged, pending = {}, #shows
+    for _, show in ipairs(shows) do
+        fetch_feed(torrents.search_url(opts.torrent_search_url, show.query), show.group, function(entries)
+            for _, e in ipairs(entries or {}) do merged[#merged + 1] = e end
+            pending = pending - 1
+            if pending == 0 then show_results("Torrents: followed shows", torrents.order(merged)) end
+        end)
+    end
+end)

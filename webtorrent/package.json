@@ -15,5 +15,8 @@
   "trustedDependencies": [
     "node-datachannel",
     "utp-native"
-  ]
+  ],
+  "patchedDependencies": {
+    "webtorrent-mpv-hook@1.4.7": "patches/webtorrent-mpv-hook@1.4.7.patch"
+  }
 }

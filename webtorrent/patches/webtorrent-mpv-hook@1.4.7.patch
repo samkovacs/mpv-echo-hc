@@ -1,0 +1,94 @@
+diff --git a/build/webtorrent.js b/build/webtorrent.js
+index 20647efadd18de0b9ead807b89a8080ec3e7e85d..1b5cf99347629de94da57e913633eb7d82dd97cd 100644
+--- a/build/webtorrent.js
++++ b/build/webtorrent.js
+@@ -11,6 +11,9 @@ var __assign = (this && this.__assign) || function () {
+     return __assign.apply(this, arguments);
+ };
+ var webTorrentRunning = false;
++// id of the running node subprocess (mp.command_native_async), so a second
++// magnet in the same mpv process can abort it and start fresh
++var runningCommand = null;
+ var active = false;
+ var initialyActive = false;
+ var overlayText = '';
+@@ -148,12 +151,14 @@ function runHook(url) {
+     mp.msg.info('Running WebTorrent hook');
+     mp.set_property('stream-open-filename', 'null://');
+     if (webTorrentRunning) {
+-        throw new Error('WebTorrent already running. Only one instance is allowed.');
++        mp.msg.info('Stopping the running WebTorrent instance');
++        stopWebTorrent();
+     }
+     var socketName = getSocketName();
+     var scriptPath = getNodeScriptPath();
+     webTorrentRunning = true;
+     initialyActive = true;
++    playlist = [];
+     mp.set_property('idle', 'yes');
+     mp.set_property('force-window', 'yes');
+     mp.set_property('keep-open', 'yes');
+@@ -164,14 +169,38 @@ function runHook(url) {
+     mp.register_event('file-loaded', onFileLoaded);
+     mp.observe_property('idle-active', 'bool', onIdleActiveChange);
+     var args = __assign({ torrentId: url, socketName: socketName }, options);
+-    mp.command_native_async({
++    var id = mp.command_native_async({
+         name: 'subprocess',
+         args: [options.node_path, scriptPath, JSON.stringify(args)],
+         playback_only: false,
+         capture_stderr: true
+-    }, onWebTorrentExit);
++    }, function (success, result) {
++        if (runningCommand !== id) {
++            return; // superseded by a newer torrent; stopWebTorrent() cleaned up
++        }
++        runningCommand = null;
++        onWebTorrentExit(success, result);
++    });
++    runningCommand = id;
+     mp.add_key_binding('p', 'toggle-info', keyPressHandler);
+ }
++function stopWebTorrent() {
++    var id = runningCommand;
++    runningCommand = null;
++    cleanup();
++    mp.abort_async_command(id);
++}
++function cleanup() {
++    webTorrentRunning = false;
++    overlayText = '';
++    clearOverlay();
++    mp.unregister_script_message('osd-data');
++    mp.unregister_script_message('playlist');
++    mp.unregister_script_message('info');
++    mp.unregister_event(onFileLoaded);
++    mp.unobserve_property(onIdleActiveChange);
++    mp.remove_key_binding('toggle-info');
++}
+ function getSocketName() {
+     var socketName = mp.get_property('input-ipc-server');
+     if (!socketName) {
+@@ -203,9 +232,7 @@ function getNodeScriptPath() {
+     }
+ }
+ function onWebTorrentExit(success, _result) {
+-    webTorrentRunning = false;
+-    overlayText = '';
+-    clearOverlay();
++    cleanup();
+     var result = _result;
+     if (!success) {
+         mp.msg.error('Failed to start WebTorrent');
+@@ -216,11 +243,5 @@ function onWebTorrentExit(success, _result) {
+     else if (result.status) {
+         mp.msg.error('WebTorrent exited with error');
+     }
+-    mp.unregister_script_message('osd-data');
+-    mp.unregister_script_message('playlist');
+-    mp.unregister_script_message('info');
+-    mp.unregister_event(onFileLoaded);
+-    mp.unobserve_property(onIdleActiveChange);
+-    mp.remove_key_binding('toggle-info');
+ }
+ mp.add_hook('on_load', 50, onLoadHook);

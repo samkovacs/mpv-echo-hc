@@ -19,6 +19,9 @@
     "utp-native",
     "node-datachannel",
   ],
+  "patchedDependencies": {
+    "webtorrent-mpv-hook@1.4.7": "patches/webtorrent-mpv-hook@1.4.7.patch",
+  },
   "packages": {
     "@silentbot1/nat-api": ["@silentbot1/nat-api@0.4.9", "", { "dependencies": { "chrome-dgram": "^3.0.6", "cross-fetch-ponyfill": "^1.0.3", "debug": "^4.4.0", "default-gateway": "^7.2.2", "unordered-array-remove": "^1.0.2", "xml2js": "^0.6.2" } }, "sha512-Bm2Fr0sJyGr4B/XgKjQxjGe7Rzs/OlK91OIHsghObxhP3Y4j2y8o7Xjlledu/pxzFEIWaTbZIBSl8ABqoP/WhQ=="],
 
