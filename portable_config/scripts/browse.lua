@@ -29,6 +29,16 @@ local function ytdlp_path()
     return "yt-dlp"
 end
 
+-- ytdl_hook passes raw options to yt-dlp verbatim, so mpv.conf cannot use
+-- ~~home/ for the cookies path. Expand it here, once, at script load.
+do
+    local raw = mp.get_property_native("ytdl-raw-options") or {}
+    if raw.cookies and raw.cookies:find("^~~") then
+        raw.cookies = mp.command_native({"expand-path", raw.cookies})
+        mp.set_property_native("ytdl-raw-options", raw)
+    end
+end
+
 -- Reuse mpv's ytdl-raw-options so cookies stay configured in one place.
 -- mark-watched is dropped: listing a feed must not mark 30 videos watched.
 local function raw_option_args()
