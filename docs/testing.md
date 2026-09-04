@@ -154,6 +154,60 @@ Gotchas learned the hard way:
 
 The last command is the regression test for ADR-0007's `~~home/../` expansion: run it from a directory that is **not** the repo root and expect an absolute path.
 
+## Torrents source (browse_torrents.lua, webtorrent.js)
+
+**Unit test**, no network. mpv is the Lua runtime; the script prints one PASS/FAIL line per assertion and exits non-zero on failure:
+
+```sh
+./mpv.exe --no-config --idle=once --script=docs/tests/browse_torrents_test.lua 2>&1 | grep -E "FAIL|ALL PASS"; echo exit=${PIPESTATUS[0]}
+```
+
+A `quit` issued while a script is still loading hangs mpv; the test quits from a timer for that reason. Do the same in any probe.
+
+**Fake index for the UI path.** Serve an RSS file locally and point the script-opts at it; `{query}` is substituted, the server ignores it:
+
+```sh
+python -m http.server 8765 --bind 127.0.0.1 --directory <dir with feed.xml> &
+./mpv.exe --idle=yes --force-window=yes --volume=0 --no-resume-playback --save-position-on-quit=no \
+  --msg-level=all=v --log-file=e2e.log --script=e2e.lua \
+  "--script-opts=browse-torrent_search_url=http://127.0.0.1:8765/feed.xml?q={query}"
+```
+
+`feed.xml` items can carry `<link>https://webtorrent.io/torrents/sintel.torrent</link>` (public, web-seeded) instead of an info hash; the parser accepts a `.torrent` link as the last resort and the hook plays it. `e2e.lua` invokes `browse/torrent-search`, types a query, presses `ENTER`, then `TAB` and `ENTER` once results are up, and on `file-loaded` asserts `path` starts with `http://localhost:` (the hook's server; a magnet never stays in `path`). Verified 2026-09-04: search → list → grid → play in 10 s; `user-data/browse/torrents` reads `true` with a URL set and `false` without, which is what hides the submenu.
+
+**Two releases in one session** (the bun patch under `webtorrent/patches/`). From an empty scratch directory, load one public torrent, wait for `file-loaded`, load the second, and count node processes:
+
+```lua
+-- two.lua
+local A, B = "https://webtorrent.io/torrents/big-buck-bunny.torrent", "https://webtorrent.io/torrents/sintel.torrent"
+local function nodes()
+    local r = mp.command_native({name = "subprocess", playback_only = false, capture_stdout = true,
+                                 args = {"tasklist", "/FI", "IMAGENAME eq node.exe", "/FO", "CSV", "/NH"}})
+    return select(2, r.stdout:gsub("node.exe", ""))
+end
+local stage = 0
+mp.register_event("file-loaded", function()
+    local p = mp.get_property("path")
+    print(string.format("stage=%d path=%s nodes=%d", stage, p, nodes()))
+    if stage == 0 and p:find("^http://localhost") then stage = 1; mp.add_timeout(5, function() mp.commandv("loadfile", B) end)
+    elseif stage == 1 and p:find("[Ss]intel") then stage = 2; mp.add_timeout(5, function() print("nodes=" .. nodes()); mp.command("quit") end) end
+end)
+mp.add_timeout(1, function() mp.commandv("loadfile", A) end)
+```
+
+Expect `Stopping the running WebTorrent instance` in the `[webtorrent]` log lines, `nodes=1` at every stage, `Sintel.mp4` playing, and the scratch directory still empty (memory mode). Before the patch the second load threw `WebTorrent already running`. Kill leftovers: `taskkill //F //IM node.exe //T`.
+
+**Overlay**: with a release playing, `Ctrl+Shift+t` (`script-binding webtorrent/toggle-info`) shows torrent name, progress bar, speeds and peers as an OSD message; the same key hides it. The binding exists only while the hook's node process runs.
+
+**Cover lookup by hand** (AniList public GraphQL, no auth):
+
+```sh
+curl -s https://graphql.anilist.co -H "Content-Type: application/json" \
+  --data-binary '{"query":"query($s:String){Page(perPage:1){media(search:$s,type:ANIME){coverImage{large}}}}","variables":{"s":"Sousou no Frieren"}}'
+```
+
+Non-anime names return `"media":[]`, which the script records as an empty `cover_<hash>.txt` and draws as a blank tile.
+
 ## Twitch GraphQL by hand
 
 `browse.lua` uses Windows' built-in `curl` (the bundled ffmpeg's https cannot verify TLS; `curl` uses schannel). To poke the endpoint directly, pull the token without printing it:

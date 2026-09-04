@@ -9,7 +9,7 @@ A fork of [Echo-Storm's MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia
 This setup is built for users who have Nvidia RTX Video Super Resolution (VSR) enabled in the Nvidia app. It includes:
 
 - A streamlined `mpv.conf` for modern GPUs (`vo=gpu-next`, `gpu-api=d3d11`, `hwdec=d3d11va-copy`)
-- **Browse inside mpv:** YouTube search plus your Subscriptions, Home, History and Watch Later feeds, and Twitch search plus a live-channel list. List or thumbnail-grid view, type to fuzzy-filter, mouse or keyboard (`browse.lua`)
+- **Browse inside mpv:** YouTube search plus your Subscriptions, Home, History and Watch Later feeds, Twitch search plus a live-channel list, and a torrent index of your choosing (search, new releases, followed shows) streamed in memory. List or thumbnail-grid view, type to fuzzy-filter, mouse or keyboard (`browse.lua`)
 - A custom Lua script that triggers VSR after 3 seconds of playback, auto-crops black bars, and upscales to native resolution — the two are integrated in one script so crop coordinates and VSR's scale factor never disagree (`vsr_autocrop.lua`)
 - GLSL shader profiles (ArtCNN, NNEDI3, RAVU, FSRCNNX, Anime4K) that take over from VSR where they apply; anime WEB-DL releases get ArtCNN automatically
 - HDR passthrough per display, SDR→HDR via libplacebo inverse tone mapping
@@ -69,6 +69,18 @@ This setup is built for users who have Nvidia RTX Video Super Resolution (VSR) e
 
    Do **not** use `cookies-from-browser`. yt-dlp writes the merged jar back to the file, which dumps every cookie your browser holds into plain text.
 
+4. **Point the Torrents source at an index** *(optional, for anime)*
+
+   The repo ships no torrent site. Paste your index's two RSS URLs into `portable_config/script-opts/browse.conf`; until both are set, `Open > Torrents` is hidden and its bindings say what to configure. Most indexes offer an RSS version of their search page; `{query}` is replaced with the URL-encoded search text:
+
+   ```ini
+   torrent_search_url=https://index.example/?page=rss&q={query}&c=1_2
+   torrent_new_url=https://index.example/?page=rss&c=1_2
+   torrent_shows=Sousou no Frieren|SubsPlease,Dandadan
+   ```
+
+   `torrent_shows` is the follow list (comma-separated search strings, an optional `|Group` suffix keeps only that release group's uploads). Playback needs Node.js on `PATH` (`node --version`); the first release will trigger a Windows Firewall prompt for `node.exe`. Nothing is written to disk: `script-opts/webtorrent.conf` runs the client in memory mode.
+
 ### 🛠️ To change settings without hand-editing config files:
 
 - **Run `3_Configuration_Manager.ps1`**
@@ -110,15 +122,16 @@ MPV/
 ├── docs/
 │   ├── adr/                                            ← decision records (why things are the way they are)
 │   └── testing.md                                      ← how to verify changes: synthetic clips, probes, UI driving
-├── webtorrent/                                         ← bun project stub, not wired up yet
+├── webtorrent/                                         ← bun project vendoring webtorrent-mpv-hook (+ patch for a second magnet per session)
 └── portable_config/
     ├── mpv.conf
     ├── profiles.conf        ← shader, HDR, downscaling and downmix profiles
     ├── input.conf
-    ├── menu.conf            ← right-click context menu (mpv default + Open File/Folder/URL, YouTube, Twitch)
+    ├── menu.conf            ← right-click context menu (mpv default + Open File/Folder/URL, YouTube, Twitch, Torrents)
     ├── fonts/               ← Netflix Sans + ModernZ icon fonts
     ├── scripts/
-    │   ├── browse.lua                    ← YouTube/Twitch search and feeds inside mpv (echo-HC)
+    │   ├── browse.lua                    ← YouTube/Twitch/torrent-index search and feeds inside mpv (echo-HC)
+    │   ├── browse_torrents.lua           ← pure Lua feed/title parsing and ordering for the Torrents source (unit test in docs/tests)
     │   ├── modernz.lua                   ← OSC UI
     │   ├── vsr_autocrop.lua              ← RTX VSR upscaler + crop-aware auto-crop, one integrated script (Echostorm)
     │   ├── screenshotfolder_echostorm.lua← organized screenshots (Echostorm)
@@ -136,9 +149,9 @@ MPV/
     │   ├── autoload.lua                  ← queue the rest of the folder as a playlist
     │   ├── autodeint.lua                 ← Ctrl+d: detect interlacing and insert a deinterlacer
     │   ├── evafast.lua                   ← hold Right to fast-forward, tap to seek
-    │   ├── webtorrent.js                 ← experimental, unconfigured
+    │   ├── webtorrent.js                 ← webtorrent-mpv-hook: streams magnet links in memory (symlink into webtorrent/, needs node on PATH)
     │   └── autochapters/main.lua         ← auto-detect anime OP/ED chapters (needs guessit.exe, see below)
-    ├── script-opts/                      ← one .conf per script above; browse.conf holds the Twitch channel list
+    ├── script-opts/                      ← one .conf per script above; browse.conf holds the Twitch channel list and the torrent index URLs, webtorrent.conf the memory-mode client
     └── shaders/                          ← ArtCNN C4F16, NNEDI3, RAVU, FSRCNNX, Anime4K, SSIM (only d3d11-compatible builds)
 ```
 
@@ -147,6 +160,7 @@ MPV/
 ## 🎯 Features
 
 - **Browse YouTube and Twitch without leaving mpv:** `Ctrl+y` searches YouTube, `Ctrl+t` searches Twitch; the right-click `Open` menu adds YouTube Subscriptions / Home / History / Watch later and Twitch Live channels. Results open in a Solarized Dark list (18 rows) or a 4x3 thumbnail grid, `Tab` toggles. Type to fuzzy-filter, arrows / PgUp / PgDn / Home / End / mouse wheel to move, hover to focus, `Enter` or click to play, `Esc` clears the filter then closes. Feeds and the 1440p Twitch rendition need login cookies (Installation step 3). Twitch does not expose the follow list to third-party clients, so `Live channels` checks the logins you list in `script-opts/browse.conf` under `twitch_channels=`
+- **Anime from a torrent index, streamed like YouTube:** `Open > Torrents` (Search..., New releases, Followed shows) queries the RSS feeds you configured (Installation step 4) and lists releases grouped by show, newest episode first, then highest resolution, then most seeders; releases with fewer than 3 seeders sink to the bottom of their show and titles the parser cannot read land in a final unparsed group. Each row shows seeders, size and a `trusted` marker; the grid shows one cover per show from AniList, cached with the thumbnails. `Enter` hands the magnet to `webtorrent.js`, which streams it in memory (a season batch loads as a playlist starting at the first file), and picking another release stops the first transfer and starts the next. `Ctrl+Shift+t` toggles the transfer overlay (speed, peers, progress)
 - **Watch history:** mpv's built-in `save-watch-history` records everything played; YouTube videos are also marked watched on your account when cookies are present
 - **Configuration Manager:** `3_Configuration_Manager.ps1` — a standalone checkbox/dropdown/text panel (including audio/subtitle language priority) for the settings worth flipping without opening a config file by hand, editing only the specific lines it changes. See Installation & Usage above
 - **Base UI:** ModernZ v0.3.3 with fluent icon theme, the only OSC. See `doc/research-osc-modernz-vs-uosc.md` for why uosc was dropped
@@ -200,6 +214,8 @@ MPV/
 - **Twitch plays at 1080p, not 1440p.** Twitch only serves the 1440p60 "Source" rendition to logged-in accounts. Either `yt-dlp-cookies.txt` is missing, or you logged out of Twitch in the browser and the `auth-token` cookie died with the session. Re-export the twitch.tv cookies (Installation step 3) and merge them into the file. To confirm: `yt-dlp.exe --cookies yt-dlp-cookies.txt -F https://twitch.tv/<channel>` should list a 2560x1440 HEVC format.
 - **YouTube Subscriptions / History / Watch later come back empty**, or yt-dlp warns "The provided YouTube account cookies are no longer valid". The YouTube cookies were taken from a live browser session and got rotated. Re-export them from a fresh private window on `youtube.com/robots.txt`, then close that window before playing anything (Installation step 3).
 - **Twitch `Live channels` shows nobody / not my follows.** Twitch's GraphQL API returns "service error" for the follow list to any third-party client; this is not fixable from our side. Fill `twitch_channels=` in `script-opts/browse.conf` with the logins you care about, comma-separated.
+- **`Open > Torrents` is missing**, or a torrent binding says "set torrent_search_url=". Both index URLs in `script-opts/browse.conf` are empty (Installation step 4). "index feed failed" with a curl message means the index did not answer; "index did not return an RSS feed" means the URL is a web page, not its RSS variant.
+- **Picking a release shows a black window and never plays.** The hook logs `Running WebTorrent hook` then nothing: no peers were found (check seeders in the row, try a `trusted` release), or `node.exe` is missing from `PATH` / blocked by the firewall. `Ctrl+Shift+t` shows peers and speed while it buffers.
 - **A shader profile does nothing, or the log says `Too many constant buffers`.** The ArtCNN C4F32 and `_CMP` compute builds exceed d3d11's 14-cbuffer / 32 KB group-shared-memory limits and libplacebo silently disables the hook after the first frame. Only the C4F16 variants work on `gpu-api=d3d11`; do not add the larger builds unless you switch to `gpu-api=vulkan`, which loses RTX VSR.
 - **4K HDR stutters / drops frames at high refresh rates.** Make sure `video-sync=audio` is still set (the Configuration Manager can switch it). `display-resample` measurably dropped frames on 2160p HDR at 240 Hz.
 
@@ -208,6 +224,11 @@ MPV/
 ## 📋 Changelog
 
 Full version history in [CHANGELOG.md](CHANGELOG.md). Latest:
+
+### 2026-09-04 — echo-HC v0.03: Torrents source in browse.lua, in-memory streaming
+
+- **`Open > Torrents`**: search, new releases and a followed-show list from a user-configured RSS index (the repo names none), grouped by show and ordered by episode / resolution / seeders, covers from AniList in the grid.
+- **`webtorrent.js`** wired up in memory mode; patched so a second release in the same session replaces the first. `Ctrl+Shift+t` toggles the transfer overlay.
 
 ### 2026-09-03 — echo-HC v0.02: in-mpv YouTube/Twitch browser, login cookies, ArtCNN, 240 Hz tuning
 
