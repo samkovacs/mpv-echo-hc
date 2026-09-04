@@ -107,6 +107,9 @@ MPV/
 │   ├── mpbindings.png
 │   ├── research-rtx-vsr-vs-shaders.md                  ← why shaders and VSR cannot stack, measured
 │   └── research-osc-modernz-vs-uosc.md                 ← why ModernZ is the only OSC
+├── docs/
+│   ├── adr/                                            ← decision records (why things are the way they are)
+│   └── testing.md                                      ← how to verify changes: synthetic clips, probes, UI driving
 ├── webtorrent/                                         ← bun project stub, not wired up yet
 └── portable_config/
     ├── mpv.conf
