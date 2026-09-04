@@ -2,6 +2,28 @@
 
 All notable changes to this repo, newest first. See [README.md](README.md) for current features and setup.
 
+Entries up to v1.0.19 are Echo-Storm's upstream MPV-Nvidia-VSR. echo-HC edition versions start at v0.01 below.
+
+### 2026-09-03 — echo-HC v0.02: in-mpv YouTube/Twitch browser, login cookies, repo hygiene
+
+- **`browse.lua`** (new): browse YouTube and Twitch from inside mpv. `Ctrl+y` / Open > YouTube: search (`ytsearch30:`) and the signed-in account's Subscriptions, Home, History and Watch later feeds via yt-dlp. `Ctrl+t` / Open > Twitch: channel search and a live-channel list via Twitch's web GraphQL endpoint, authenticated with the `auth-token` cookie from the same cookies file. Rendered on an ASS OSD overlay in Solarized Dark, because `mp.input.select` cannot colour parts of a row: list view (18 rows, title / channel / duration or LIVE) or a 4x3 thumbnail grid (thumbnails fetched with Windows `curl`, scaled by ffmpeg, cached in `%TEMP%\mpv-browse-thumbs`, pruned after `thumb_cache_days`). `Tab` toggles views, typing fuzzy-filters with matched characters highlighted, arrows / PgUp / PgDn / Home / End / wheel navigate, hover focuses, click or `Enter` loads, `Esc` clears the filter then closes. `script-opts/browse.conf`: `view`, `thumb_cache_days`, `twitch_channels`.
+- **Twitch follow list is not available to third parties.** `currentUser.follows`, `followedLiveUsers` and `personalSections(FOLLOWED_SECTION)` all return "service error" from any non-Twitch client (tried browser UA/Origin, integrity token, device ids, other client ids, Helix). Live channels are read from a hand-maintained `twitch_channels=` list instead.
+- **Login cookies for yt-dlp** (`mpv.conf`): `ytdl-raw-options-append=cookies=~~home/../yt-dlp-cookies.txt`, one Netscape cookies.txt for twitch.tv and youtube.com, gitignored. Twitch serves the 1440p60 HEVC "Source" rendition only to logged-in accounts; anonymous tops out at 1080p60. YouTube cookies must be exported from a closed private window, live-session cookies get rotated and rejected. `cookies-from-browser` was tried and dropped: yt-dlp writes the whole browser jar back to the file. `mark-watched` added so played YouTube videos land in the account's history.
+- **Cookies path is portable.** `ytdl_hook` passes raw options to yt-dlp verbatim, so `browse.lua` expands a leading `~~` in the cookies entry at load. `~~exe_dir` was rejected: on this build it expands to a CWD-relative path.
+- **Repo hygiene**: `.gitattributes` (`text=auto eol=lf`, binaries marked); `.mpv_last_archive.txt`, `.ffmpeg_last_archive.txt` and `RESUME.md` gitignored and untracked; `CLAUDE.md` and `docs/agents/` added for the engineering skills; GitHub Issues enabled on the repo.
+- README rewritten for the echo-HC edition: browser, cookie setup, shader and HDR behaviour, new Troubleshooting entries. `doc/header.svg` and the screenshots still show the previous edition, pending an art pass.
+
+### 2026-09-01 — echo-HC v0.01: baseline retune for 240 Hz HDR, ArtCNN, single OSC
+
+- **Fullscreen freezes**: `d3d11-exclusive-fs=yes` removed. Fixes the right-click-menu freeze in fullscreen (confirmed); the intermittent fullscreen lockup shares the cause.
+- **`video-sync=audio`** replaces `display-resample`. Measured on a 2160p10 PQ clip at 240 Hz: every display-sync mode dropped 6–11 frames per 9 s, audio sync dropped none.
+- **Shaders vs VSR**: `vsr_autocrop.lua` skips `@vsr` when `glsl-shaders` is set. They cannot stack: d3d11vpp scales first and every shader hook is gated on `OUTPUT > LUMA`. Anime WEB-DL profile in `mpv.conf` applies `ArtCNN_C4F16_DS.glsl`; manual `[ArtCNN]` / `[ArtCNN-DS]` profiles replace `[Ani4k]` / `[AniSD]`. Details and measurements in `doc/research-rtx-vsr-vs-shaders.md`.
+- **ArtCNN C4F32 and `_CMP` compute builds removed**: they exceed d3d11's 14 constant-buffer / 32 KB group-shared-memory limits and libplacebo silently disables the hook. Only C4F16 variants compile on `gpu-api=d3d11`.
+- **HDR**: `inverse-tone-mapping=yes`; `hdr-mode.lua` owns the render target per display and, in pass mode, points SDR sources at the display's measured peak. `nvidia_true_hdr=no`.
+- **Removed**: uosc, inputevent.lua, playlistmanager, memo (mpv's built-in `save-watch-history=yes` replaces it), webtorrent.conf and profile, nlmeans shader, `priority=high`, `force-seekable=yes`. ModernZ is the sole OSC (`doc/research-osc-modernz-vs-uosc.md`); native `menu.conf` right-click menu; built-in `select.lua` for lists.
+- `deband=yes` globally. `watch-later-options-remove` also covers `af` and `deinterlace`. `4k-Downscaling` profile-cond nil-guarded. ModernZ `tick_delay_follow_display_fps=yes`.
+- `vsr_autocrop`: no filter-chain rebuild when nothing changed; 10-bit no longer excluded; exact scale factor; crop detection retried at 4/20/65/185 s. Downmix profiles: pan renormalised, gain restaged.
+
 ### 2026-07-31 — v1.0.19: Remove Verbose Logging, Video Sync + Stream Cache in Configuration Manager
 
 - **Removed `log-file=~~/mpv.log`** from `mpv.conf`. This was added for active testing and forced mpv's own logging up to at least `-v -v` (mpv's documented behavior whenever `log-file` is set) — the direct cause of the 1.3MB single-session log examined earlier. Flagged in its own comment as temporary since it was added; now actually removed.
