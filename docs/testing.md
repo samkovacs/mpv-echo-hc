@@ -173,7 +173,7 @@ python -m http.server 8765 --bind 127.0.0.1 --directory <dir with feed.xml> &
   "--script-opts=browse-torrent_search_url=http://127.0.0.1:8765/feed.xml?q={query}"
 ```
 
-`feed.xml` items can carry `<link>https://webtorrent.io/torrents/sintel.torrent</link>` (public, web-seeded) instead of an info hash; the parser accepts a `.torrent` link as the last resort and the hook plays it. `e2e.lua` invokes `browse/torrent-search`, types a query, presses `ENTER`, then `TAB` and `ENTER` once results are up, and on `file-loaded` asserts `path` starts with `http://localhost:` (the hook's server; a magnet never stays in `path`). Verified 2026-09-04: search → list → grid → play in 10 s; `user-data/browse/torrents` reads `true` with a URL set and `false` without, which is what hides the submenu.
+`feed.xml` items can carry `<link>https://webtorrent.io/torrents/sintel.torrent</link>` (public, web-seeded) instead of an info hash; the parser prefers a `.torrent` link (tracker list included) and the hook plays it. A bare-hash magnet for the same release timed out at 75 s with 0 peers on 2026-09-04; the `.torrent` link played in 8 s. `e2e.lua` invokes `browse/torrent-search`, types a query, presses `ENTER`, then `TAB` and `ENTER` once results are up, and on `file-loaded` asserts `path` starts with `http://localhost:` (the hook's server; a magnet never stays in `path`). Verified 2026-09-04: search → list → grid → play in 10 s; `user-data/browse/torrents` reads `true` with a URL set and `false` without, which is what hides the submenu.
 
 **Two releases in one session** (the bun patch under `webtorrent/patches/`). From an empty scratch directory, load one public torrent, wait for `file-loaded`, load the second, and count node processes:
 

@@ -96,7 +96,11 @@ end
 local entries = T.parse_feed(full_feed("nyaa"))
 eq("feed item count", #entries, 6)
 local e = entries[1]
-eq("feed magnet from info hash", e.url:match("^magnet:%?xt=urn:btih:(%x+)"), "0000000000000000000000000000000000000001")
+eq("feed .torrent link wins over info hash (carries trackers)", e.url, "https://example.invalid/1.torrent")
+local hash_only = T.parse_feed(rss("x", {item({{"title", "[G] Hash Only - 01 (1080p)"}, {"link", "https://example.invalid/view/1"},
+                                               {"x:infoHash", "0000000000000000000000000000000000000001"}})}))
+eq("feed magnet from info hash when there is no .torrent link",
+   hash_only[1].url:match("^magnet:%?xt=urn:btih:(%x+)"), "0000000000000000000000000000000000000001")
 eq("feed seeders", e.seeders, 50)
 eq("feed size", e.size, "1.4 GiB")
 eq("feed trusted", e.trusted, true)
@@ -109,7 +113,7 @@ check("feed pubdate parsed", entries[2].time > entries[1].time, entries[2].time)
 
 local other = T.parse_feed(full_feed("torrent"))
 eq("namespace prefix ignored", other[1].seeders, 50)
-eq("namespace prefix ignored (hash)", other[1].url, entries[1].url)
+eq("namespace prefix ignored (trusted)", other[1].trusted, true)
 
 local ordered = T.order(entries)
 local titles = {}
@@ -133,7 +137,7 @@ local pe = T.parse_feed(plain)
 eq("plain feed count (no playable url is dropped)", #pe, 3)
 eq("magnet from link, entity decoded", pe[1].url, "magnet:?xt=urn:btih:00000000000000000000000000000000000000AA&dn=x")
 eq("magnet from enclosure", pe[2].url, "magnet:?xt=urn:btih:00000000000000000000000000000000000000BB")
-eq(".torrent link as last resort", pe[3].url, "https://example.invalid/3.torrent")
+eq(".torrent link", pe[3].url, "https://example.invalid/3.torrent")
 eq("missing seeders is nil", pe[1].seeders, nil)
 eq("missing trusted is nil", pe[1].trusted, nil)
 eq("sparse channel line", pe[1].channel, "")

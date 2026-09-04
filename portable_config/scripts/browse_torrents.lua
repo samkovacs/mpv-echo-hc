@@ -93,15 +93,18 @@ local function fields_of(item)
     return f
 end
 
+-- A .torrent link wins over a magnet built from the info hash: the file
+-- carries the index's tracker list, while a bare hash leaves the hook with
+-- DHT alone, which found no peers in 75 s on the reference machine.
 local function playable_url(f)
+    if (f.link or ""):match("%.torrent$") then return f.link end
+    if (f.enclosure or ""):match("%.torrent$") then return f.enclosure end
+    local m = (f.link or ""):match("magnet:%?[^%s<\"]+") or (f.enclosure or ""):match("magnet:%?[^%s<\"]+")
+    if m then return m end
     local hash = f.infohash
     if hash and hash:match("^%x+$") then
         return "magnet:?xt=urn:btih:" .. hash .. "&dn=" .. M.urlencode(f.title or "")
     end
-    local m = (f.link or ""):match("magnet:%?[^%s<\"]+") or (f.enclosure or ""):match("magnet:%?[^%s<\"]+")
-    if m then return m end
-    if (f.link or ""):match("%.torrent$") then return f.link end
-    if (f.enclosure or ""):match("%.torrent$") then return f.enclosure end
     return nil
 end
 
@@ -113,7 +116,7 @@ end
 
 -- XML text -> entries in feed order (nil, message if it is not an RSS
 -- document). `group` keeps only releases from that release group, for the
--- "Show|Group" followed-show syntax. Entry fields: url (magnet), title,
+-- "Show|Group" followed-show syntax. Entry fields: url (.torrent or magnet), title,
 -- channel (seeders / size / trusted line), show, group, episode,
 -- resolution, seeders, size, trusted, time, index.
 function M.parse_feed(xml, group)
