@@ -1,0 +1,3 @@
+# No d3d11 exclusive fullscreen
+
+`d3d11-exclusive-fs=yes` was set for the latency and HDR-passthrough benefits people associate with exclusive mode. It caused two freezes: the right-click menu (a Win32 popup, so a second window taking focus) locked the player in fullscreen, and an intermittent fullscreen lockup shared the same mechanism. Exclusive mode drops out whenever any other window takes focus, and the recovery path is where things hang. Removed 2026-09-01; the menu freeze was confirmed fixed. Windows 11's flip-model borderless fullscreen already gives direct scanout, and HDR passthrough does not need exclusive mode, so nothing was lost.
