@@ -28,17 +28,17 @@ This setup is built for users who have Nvidia RTX Video Super Resolution (VSR) e
 </td>
 <td width="50%">
 <img src="doc/mpv_rightclick_menu.jpg" width="100%">
-<p align="center"><sub><b>Right-click menu</b></sub></p>
+<p align="center"><sub><b>Right-click menu</b> — mpv's native <code>menu.conf</code> menu</sub></p>
 </td>
 </tr>
 <tr>
 <td width="50%">
-<img src="doc/mpv_open_submenu.jpg" width="100%">
-<p align="center"><sub><b>Open submenu</b> — native file/folder/URL dialogs</sub></p>
+<img src="doc/mpv_browse_list.jpg" width="100%">
+<p align="center"><sub><b>Browse</b> — YouTube search, list view (<code>Ctrl+y</code>)</sub></p>
 </td>
 <td width="50%">
-<img src="doc/mpv_tools_clipexport_submenu.jpg" width="100%">
-<p align="center"><sub><b>Tools submenu</b> — Clip export, hardware decoding toggle</sub></p>
+<img src="doc/mpv_browse_grid.jpg" width="100%">
+<p align="center"><sub><b>Browse</b> — same results, thumbnail grid (<code>Tab</code>)</sub></p>
 </td>
 </tr>
 </table>
