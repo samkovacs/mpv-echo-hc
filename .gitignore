@@ -40,3 +40,11 @@ portable_config.backup-*/
 backup_*/
 portable_config/watch_history.jsonl
 yt-dlp-cookies.txt
+
+# Installer markers for what is downloaded on this machine (see
+# 1_Full_Latest_MPV_Installer.ps1), not source
+.mpv_last_archive.txt
+.ffmpeg_last_archive.txt
+
+# Local agent handoff notes: machine specs, profile names, absolute paths
+RESUME.md
