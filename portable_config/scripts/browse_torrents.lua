@@ -16,9 +16,22 @@ M.SEEDER_FLOOR = 3
 local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 
 local ENTITIES = {amp = "&", lt = "<", gt = ">", quot = '"', apos = "'"}
+
+-- code point -> UTF-8 (Lua 5.1 has no utf8.char)
+local function utf8_char(n)
+    if n < 0x80 then return string.char(n) end
+    if n < 0x800 then return string.char(0xC0 + math.floor(n / 0x40), 0x80 + n % 0x40) end
+    if n < 0x10000 then
+        return string.char(0xE0 + math.floor(n / 0x1000), 0x80 + math.floor(n / 0x40) % 0x40, 0x80 + n % 0x40)
+    end
+    return string.char(0xF0 + math.floor(n / 0x40000), 0x80 + math.floor(n / 0x1000) % 0x40,
+                       0x80 + math.floor(n / 0x40) % 0x40, 0x80 + n % 0x40)
+end
+
 local function decode(s)
     s = s:gsub("^%s*<!%[CDATA%[(.-)%]%]>%s*$", "%1")
-    s = s:gsub("&#(%d+);", function(n) return string.char(tonumber(n)) end)
+    s = s:gsub("&#[xX](%x+);", function(n) return utf8_char(tonumber(n, 16)) end)
+    s = s:gsub("&#(%d+);", function(n) return utf8_char(tonumber(n)) end)
     s = s:gsub("&(%a+);", ENTITIES)
     return trim(s)
 end

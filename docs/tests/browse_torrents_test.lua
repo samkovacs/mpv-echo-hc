@@ -146,6 +146,10 @@ local cd = T.parse_feed(rss("x", {item({{"title", "<![CDATA[[G] Tom &amp; Jerry 
 eq("cdata + entity title", cd[1].title, "[G] Tom & Jerry - 01 (1080p)")
 eq("cdata + entity show", cd[1].show, "Tom & Jerry")
 
+local ent = T.parse_feed(rss("x", {item({{"title", "[G] Show&#8217;s Title &#x2013; 02 (1080p)"},
+                                         {"link", "magnet:?xt=urn:btih:00000000000000000000000000000000000000DD"}})}))
+eq("numeric entities above 255 become UTF-8", ent[1].title, "[G] Show" .. string.char(226, 128, 153) .. "s Title " .. string.char(226, 128, 147) .. " 02 (1080p)")
+
 -- not XML
 local bad, err = T.parse_feed("<!doctype html><html><body>blocked</body></html>")
 eq("non-xml returns nil", bad, nil)

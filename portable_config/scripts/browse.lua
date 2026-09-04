@@ -354,12 +354,14 @@ local function ensure_cover(show)
                     variables = {s = show}})},
     }, function(ok, res)
         local data = ok and res.status == 0 and utils.parse_json(res.stdout)
-        if not data then
-            mp.msg.warn(string.format("cover lookup failed: %s %s", show, res and res.stderr or ""))
-            covers[show] = nil -- retry on the next draw
-            return
+        if not (data and data.data) then
+            -- network error or an AniList error body: no cover this session,
+            -- nothing cached, so the next mpv start tries again
+            mp.msg.warn(string.format("cover lookup failed: %s %s", show,
+                                      res and (res.stderr .. (res.stdout or "")):sub(1, 200) or ""))
+            return apply_cover(show, nil)
         end
-        local media = data.data and data.data.Page and data.data.Page.media
+        local media = data.data.Page and data.data.Page.media
         local url = media and media[1] and media[1].coverImage and media[1].coverImage.large
         local out = io.open(file, "w")
         if out then out:write(url or ""); out:close() end
