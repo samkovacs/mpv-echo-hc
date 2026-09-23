@@ -215,7 +215,7 @@ The lists themselves are fetched by `browse.lua` into `%TEMP%\mpv-browse-thumbs\
 
 A `quit` issued while a script is still loading hangs mpv; the test quits from a timer for that reason. Do the same in any probe.
 
-**Seekbar thumbnails on YouTube** (`thumbfast.lua`), real config, needs network. Fails with `create_failed=true` if the thumbnailer's command line overflows Windows' 32767-char limit again:
+**Seekbar thumbnails on network video** (`thumbfast.lua`), real config, needs network. Run it on a YouTube video and on a Twitch VOD (VODs expire; list current ones with `./yt-dlp.exe --flat-playlist -I 1 --print url "https://www.twitch.tv/<channel>/videos?filter=archives"`). Fails with `create_failed=true` if the thumbnailer's command line overflows Windows' 32767-char limit again, and with a `thumb=` aspect ratio unlike `video=` if thumbnails come out scrambled after `vsr_autocrop` crops (Twitch VODs with the webcam overlay trigger it):
 
 ```sh
 ./mpv.exe --geometry=640x360 --no-resume-playback --save-position-on-quit=no --volume=0 \

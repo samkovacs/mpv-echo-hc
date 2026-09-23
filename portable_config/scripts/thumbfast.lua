@@ -264,6 +264,11 @@ local unique = mp.utils.getpid()
 options.socket = options.socket .. unique
 options.thumbnail = options.thumbnail .. unique
 
+-- Local patch (not upstream thumbfast), see spawn()
+local socket_base = options.socket
+local spawn_count = 0
+local spawn_handle
+
 if options.direct_io then
     if os_name == "windows" then
         winapi.socket_wc = winapi.MultiByteToWideChar("\\\\.\\pipe\\" .. options.socket)
@@ -324,11 +329,22 @@ local function vf_string(filters, full)
     local vf_table = properties["vf"]
 
     if (properties["video-crop"] or "") ~= "" then
-        vf = "lavfi-crop="..string.gsub(properties["video-crop"], "(%d*)x?(%d*)%+(%d+)%+(%d+)", "w=%1:h=%2:x=%3:y=%4")..","
-        local width = properties["video-out-params"] and properties["video-out-params"]["dw"]
-        local height = properties["video-out-params"] and properties["video-out-params"]["dh"]
-        if width and height then
-            vf = string.gsub(vf, "w=:h=:", "w="..width..":h="..height..":")
+        -- Local patch (not upstream thumbfast): video-crop is in pixels of the
+        -- player's output frame, after @vsr upscaling (vsr_autocrop) and at the
+        -- playing stream's resolution. The subprocess decodes the raw frame,
+        -- possibly of a smaller stream, so pixels do not fit it: the vf is
+        -- rejected, the old output size stays, and the thumbnail is read at a
+        -- wrong width (stripes). Crop by fraction of iw/ih instead.
+        local vop = properties["video-out-params"]
+        local fw, fh = vop and vop["w"], vop and vop["h"]
+        local cw, ch, cx, cy = properties["video-crop"]:match("^(%d*)x?(%d*)%+(%d+)%+(%d+)$")
+        if not (fw and fh and cx) then
+            mp.msg.error("cannot map video-crop '"..properties["video-crop"].."' onto the thumbnail, not cropping")
+        else
+            cx, cy = tonumber(cx), tonumber(cy)
+            cw, ch = tonumber(cw) or (fw - cx), tonumber(ch) or (fh - cy)
+            vf = string.format("lavfi-crop=w=iw*%d/%d:h=ih*%d/%d:x=iw*%d/%d:y=ih*%d/%d,",
+                cw, fw, ch, fh, cx, fw, cy, fh)
         end
     end
 
@@ -547,6 +563,24 @@ local function spawn(time)
         table.insert(args, "--macos-app-activation-policy=accessory")
     end
 
+    -- Local patch (not upstream thumbfast): a respawn's IPC "quit" is lost if
+    -- the previous thumbnailer has not opened its pipe yet (vsr_autocrop
+    -- resizes twice within seconds of load). It then lives on, keeps the pipe
+    -- name so the new one gets no IPC, and answers every seek at the old size,
+    -- which thumbfast reads at a wrong width (stripes). Kill it outright and
+    -- give each spawn its own pipe so a dying one cannot hold the name.
+    if spawn_handle then
+        mp.abort_async_command(spawn_handle)
+        spawn_handle = nil
+    end
+    if os_name == "windows" then
+        spawn_count = spawn_count + 1
+        options.socket = socket_base .. "_" .. spawn_count
+        if options.direct_io then
+            winapi.socket_wc = winapi.MultiByteToWideChar("\\\\.\\pipe\\" .. options.socket)
+        end
+    end
+
     if os_name == "windows" or pre_0_33_0 then
         table.insert(args, "--input-ipc-server="..options.socket)
     elseif not script_written then
@@ -573,8 +607,12 @@ local function spawn(time)
     spawned = true
     spawn_waiting = true
 
-    subprocess(args, true,
+    local handle
+    handle = subprocess(args, true,
         function(success, result)
+            -- a thumbnailer replaced by a later spawn exiting is not an error
+            if handle ~= spawn_handle then return end
+            spawn_handle = nil
             if spawn_waiting and (success == false or (result.status ~= 0 and result.status ~= -2)) then
                 spawned = false
                 spawn_waiting = false
@@ -616,6 +654,7 @@ local function spawn(time)
             end
         end
     )
+    spawn_handle = handle
 end
 
 local function run(command)
