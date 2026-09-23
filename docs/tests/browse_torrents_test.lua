@@ -54,6 +54,47 @@ eq("trailing episode", t.episode, 5)
 t = T.parse_title("[Group] Other Show - 03 (4K)")
 eq("4K resolution", t.resolution, 2160)
 
+-- season / version / batch range, and the row text built from them
+t = T.parse_title("[SubsPlease] Mushoku Tensei S2 - 07 (1080p) [A1B2C3D4].mkv")
+eq("S2 show keeps the season (groups seasons apart)", t.show, "Mushoku Tensei S2")
+eq("S2 season", t.season, 2)
+eq("S2 episode", t.episode, 7)
+
+local long = "[Erai-raws] Mushoku Tensei - Isekai Ittara Honki Dasu 2nd Season - 07v2 [1080p][Multiple Subtitle][ABCD].mkv"
+t = T.parse_title(long)
+eq("nth Season season", t.season, 2)
+eq("nth Season episode", t.episode, 7)
+eq("version", t.version, 2)
+
+eq("SxxExx season", T.parse_title("[EMBER] Show Title S02E07 [1080p]").season, 2)
+eq("Season N season", T.parse_title("[Judas] Frieren (Season 1) [1080p] (Batch)").season, 1)
+eq("S01 remux season", T.parse_title("Show Title S01 2160p 4K UHD BluRay Remux-GROUP").season, 1)
+eq("no season", T.parse_title("[SubsPlease] Sousou no Frieren - 28 (1080p)").season, nil)
+eq("no version", T.parse_title("[SubsPlease] Sousou no Frieren - 28 (1080p)").version, nil)
+
+t = T.parse_title("[SubsPlease] Show Name (01-12) (1080p) [Batch]")
+eq("range batch episodes", t.episodes, "01-12")
+t = T.parse_title("[Group] Show Name - 01 ~ 24 [1080p]")
+eq("dash range is a batch, not episode 1", t.episode, nil)
+eq("dash range episodes", t.episodes, "01-24")
+eq("dash range show", t.show, "Show Name")
+eq("year is not a range", T.parse_title("[G] Show (2024) - 05 (1080p)").episodes, nil)
+
+local function row(title)
+    local p = T.parse_title(title)
+    p.title = title
+    return table.concat({T.display(p)}, "|")
+end
+eq("display S2", row("[SubsPlease] Mushoku Tensei S2 - 07 (1080p) [A1B2C3D4].mkv"),
+   "[SubsPlease] |Mushoku Tensei|  S2 E07  1080p")
+eq("display nth Season, version", row(long), "[Erai-raws] |Mushoku Tensei - Isekai Ittara Honki Dasu|  S2 E07v2  1080p")
+eq("display no season", row("[SubsPlease] Sousou no Frieren - 28 (1080p) [A1B2].mkv"),
+   "[SubsPlease] |Sousou no Frieren|  E28  1080p")
+eq("display batch", row("[SubsPlease] Show Name (01-12) (1080p) [Batch]"), "[SubsPlease] |Show Name|  E01-12  1080p")
+eq("display no group, 4K", row("Show Title S01 2160p 4K UHD BluRay Remux-GROUP"), "|Show Title|  S1  2160p")
+eq("display bare", row("[G] Movie Name"), "[G] |Movie Name|")
+eq("display episode 100+", row("[G] One Piece - 1120 (1080p)"), "[G] |One Piece|  E1120  1080p")
+
 eq("unparsed title", T.parse_title("[Group][1080p][HEVC]"), nil)
 eq("unparsed extension only", T.parse_title("(1080p) [ABCD].mkv"), nil)
 

@@ -65,9 +65,33 @@ function M.parse_title(title)
     if not show then show, episode = rest:match("^(.-)%s+(%d%d?)%s*[%(%[]") end
     show = cut_show(show or rest)
     if show == "" then return nil end
+    -- "01-12" / "01 ~ 24" is a batch, not episode 1. Zero-padded and
+    -- ascending only, so "S2 - 07" and "Mob Psycho 100 - 05" stay episodes.
+    local a, b = rest:match("%f[%d](%d%d+)%s*[-~]%s*(%d%d+)%f[%D]")
+    local episodes
+    if a and tonumber(a) < tonumber(b) then episodes, episode = a .. "-" .. b, nil end
+    local season = rest:match("%f[%w]S(%d+)E%d") or rest:match("%f[%w]S(%d%d?)%f[%W]") or
+                   rest:match("%f[%d](%d+)%a%a%s+[Ss]eason") or rest:match("[Ss]eason%s+(%d+)")
+    local version = rest:match("%f[%d]%d+v(%d)%f[%D]")
     local res = t:match("%f[%d](%d%d%d%d?)p%f[%A]")
     if res then res = tonumber(res) elseif t:find("%f[%w]4K%f[%W]") or t:find("%f[%d]2160%f[%D]") then res = 2160 end
-    return {group = group, show = show, episode = episode and tonumber(episode), resolution = res}
+    return {group = group, show = show, season = season and tonumber(season), episode = episode and tonumber(episode),
+            episodes = episodes, version = version and tonumber(version), resolution = res}
+end
+
+-- Entry -> its results row in three parts: "[Group] ", the show name, and
+-- "  S2 E07v2  1080p". browse.lua shortens only the name, so the tags stay
+-- visible however long it is. The name drops its season; the tag has it.
+function M.display(e)
+    local show = e.show:gsub("%s+S%d+$", ""):gsub("%s+%d+%a%a%s+[Ss]eason$", ""):gsub("%s+[Ss]eason%s+%d+$", "")
+    local ep = e.episodes and "E" .. e.episodes or e.episode and string.format("E%02d", e.episode)
+    if ep and e.version then ep = ep .. "v" .. e.version end
+    local se, tags = {}, {}
+    if e.season then se[#se + 1] = "S" .. e.season end
+    if ep then se[#se + 1] = ep end
+    if #se > 0 then tags[1] = table.concat(se, " ") end
+    if e.resolution then tags[#tags + 1] = e.resolution .. "p" end
+    return e.group and "[" .. e.group .. "] " or "", show, #tags > 0 and "  " .. table.concat(tags, "  ") or ""
 end
 
 -- ------------------------------------------------------------------ feeds
@@ -140,8 +164,8 @@ function M.parse_feed(xml, group)
             if trusted then line[#line + 1] = "trusted" end
             entries[#entries + 1] = {
                 url = url, title = f.title, channel = table.concat(line, " · "),
-                show = parsed.show, group = parsed.group, episode = parsed.episode,
-                resolution = parsed.resolution, seeders = seeders, size = f.size,
+                show = parsed.show, group = parsed.group, season = parsed.season, episode = parsed.episode,
+                episodes = parsed.episodes, version = parsed.version, resolution = parsed.resolution, seeders = seeders, size = f.size,
                 trusted = trusted, time = parse_date(f.pubdate) or -#entries, index = #entries + 1,
             }
         end

@@ -137,17 +137,42 @@ local function render(text, color, offset, matched)
     return table.concat(out)
 end
 
--- The string the filter matches against: "title channel"
-local function haystack(e)
-    return chars((e.title or e.url) .. " " .. (e.channel or e.uploader or ""))
+local function truncate(s, max_chars)
+    local cs = chars(s)
+    if #cs <= max_chars then return s end
+    return table.concat(cs, "", 1, math.max(1, max_chars - 1)) .. "…"
 end
 
-local function label(e, focused, matched)
-    local title, who = e.title or e.url, e.channel or e.uploader or ""
-    local parts = {render(title, focused and C_FOCUS or C_TITLE, 0, matched)}
+-- A row's title as prefix, name, suffix. Torrents show "[Group] Show  S2 E07
+-- 1080p" parsed from the release title; other sources their plain title.
+local function title_parts(e)
+    if e.show then return torrents.display(e) end
+    return "", e.title or e.url, ""
+end
+
+-- The string the filter matches against: "title channel"
+local function haystack(e)
+    local pre, name, post = title_parts(e)
+    return chars(pre .. name .. post .. " " .. (e.channel or e.uploader or ""))
+end
+
+-- The title in at most max_chars; only the name is shortened. Returns the
+-- ASS text and the title's length in haystack characters.
+local function render_title(e, max_chars, focused, matched)
+    local pre, name, post = title_parts(e)
+    local np, nn = #chars(pre), #chars(name)
+    local short = truncate(name, math.max(1, max_chars - np - #chars(post)))
+    return render(pre, C_CHANNEL, 0, matched) .. render(short, focused and C_FOCUS or C_TITLE, np, matched) ..
+           render(post, C_TIME, np + nn, matched), np + nn + #chars(post)
+end
+
+local function label(e, focused, matched, max_chars)
+    local who = e.channel or e.uploader or ""
+    local title, n = render_title(e, max_chars - #chars(who) - 12, focused, matched)
+    local parts = {title}
     if who ~= "" then
         parts[#parts + 1] = colored(C_CHANNEL, "[") ..
-            render(who, C_CHANNEL, #chars(title) + 1, matched) .. colored(C_CHANNEL, "]")
+            render(who, C_CHANNEL, n + 1, matched) .. colored(C_CHANNEL, "]")
     end
     if e.live_status == "is_live" then
         parts[#parts + 1] = colored(C_LIVE, "LIVE")
@@ -286,12 +311,6 @@ local function ensure_thumb(url, w, h, cb, max_age)
     end)
 end
 
-local function truncate(s, max_chars)
-    local cs = chars(s)
-    if #cs <= max_chars then return s end
-    return table.concat(cs, "", 1, math.max(1, max_chars - 1)) .. "…"
-end
-
 local function list_filter()
     local needle = chars(list.filter)
     list.view = {}
@@ -331,11 +350,13 @@ local function draw_list(W, H)
     local first = math.max(1, math.min(list.cursor - math.floor(ROWS / 2), n - ROWS + 1))
     local last = math.min(n, first + ROWS - 1)
     local lines = {header_text()}
+    -- ~0.52 em per character, as in the grid; keeps long titles on one line
+    local max_chars = math.floor((W - 40 * s) / (22 * s * 0.52))
     for i = first, last do
         local focused = i == list.cursor
         local row = list.view[i]
         lines[#lines + 1] = (focused and colored(C_FOCUS, "▸ ") or "  ") ..
-                            label(list.entries[row.i], focused, row.matched)
+                            label(list.entries[row.i], focused, row.matched, max_chars)
     end
     if n == 0 then lines[#lines + 1] = colored(C_DIM, "  no match") end
     if last < n then lines[#lines + 1] = colored(C_DIM, string.format("  … %d more", n - last)) end
@@ -432,7 +453,7 @@ local function draw_grid(W, H)
                 "{\\an7\\pos(%d,%d)\\1a&HFF&\\3c&H%s&\\bord%d\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}",
                 x, y, C_FOCUS, math.max(2, math.floor(3 * s)), tw, tw, th, th)
         end
-        local title, who = e.title or e.url, e.channel or e.uploader or ""
+        local who = e.channel or e.uploader or ""
         local line2 = colored(C_CHANNEL, truncate(who, max_chars - 8))
         if e.live_status == "is_live" then
             line2 = line2 .. "  " .. colored(C_LIVE, "LIVE")
@@ -441,7 +462,7 @@ local function draw_grid(W, H)
         end
         ev[#ev + 1] = string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord1\\3c&H%s&\\shad0\\q2}%s\\N%s",
                                     x, y + th + math.floor(3 * s), fs, C_BACK,
-                                    render(truncate(title, max_chars), focused and C_FOCUS or C_TITLE, 0, row.matched),
+                                    (render_title(e, max_chars, focused, row.matched)),
                                     line2)
         if e.show and not e.thumbnail then ensure_cover(e.show) end
         local url = thumb_url(e, tw)
