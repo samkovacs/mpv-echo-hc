@@ -173,10 +173,23 @@ Gotchas learned the hard way:
 
 - **Pace typed text.** Consecutive `keypress` calls in one tick lose letters that have bindings in `input.conf` (`a`, `i`, ...). Space them ~80 ms apart with `mp.add_timeout`.
 - **`screenshot-to-file ... window` needs a playing video.** It does nothing in `--idle`. Use the demo clip with `--geometry=1280x720`.
-- **On an HDR display, mpv's screenshots are PQ-encoded** and look washed out in any SDR viewer. For README images use a GDI screen grab of the client area instead (PowerShell `System.Drawing` `CopyFromScreen` with `GetClientRect` + `ClientToScreen`; call `SetProcessDPIAware` first). The native right-click menu is a Win32 popup and only shows up in a screen grab anyway.
+- **On an HDR display, mpv's screenshots are PQ-encoded** and look washed out in any SDR viewer. For README images use a GDI screen grab of the client area instead (`BitBlt` from the screen DC with `SRCCOPY | CAPTUREBLT` over `GetClientRect` + `ClientToScreen` of `window-id`; call `SetProcessDPIAware` first).
+- **A GDI grab of an HDR window blows out OSD colours** (`#859900` comes back `#FFFF00`). Run mpv with SDR output for README shots: `--script-opts=hdr_mode-hdr_mode=noth --target-colorspace-hint=no --target-trc=srgb --target-prim=bt.709 --inverse-tone-mapping=no`.
+- **The right-click menu is OSD-drawn** (`load-context-menu=yes`, built-in `context_menu.lua`) and opens on a real right-click at the OS cursor; send one with `SetCursorPos` + `mouse_event`.
 - **Real mouse position matters** for the right-click menu (it opens at the OS cursor, not mpv's `mouse` position) and for ModernZ staying visible. Park the real cursor off the window before browser shots.
 - **Thumbnail grid needs ~10 s** after `Tab` for downloads on a cold cache.
 - Stream-resolution check for a loaded network file: a probe that prints `video-params/w`, `video-params/h` and `video-codec` after 15 s.
+
+## stats.lua (local copy)
+
+`portable_config/scripts/stats.lua` is mpv's built-in stats script copied from the commit the bundled `mpv.exe` was built from, loaded instead of the built-in (`load-stats-overlay=no`), with one local patch: `set_pane_ass` draws the text on the browse/whichkey pane. After the installer brings in a newer mpv:
+
+```sh
+./mpv.exe --version | head -1        # v0.41.0-923-g7b8915bc1 -> commit 7b8915bc1
+gh api "repos/mpv-player/mpv/contents/player/lua/stats.lua?ref=<commit>"   -H "Accept: application/vnd.github.raw" > /tmp/stats.lua
+```
+
+Copy the header comment and the `local patch` block into the new file, point the two `mp.set_osd_ass` calls in `print_page` and `clear_screen` at `set_pane_ass`, then check by eye: `I` toggles the pane, `2` switches pages inside it, `I` again and the one-shot `i` (after its 4 s) leave nothing behind.
 
 ## yt-dlp and cookies
 
