@@ -435,6 +435,63 @@ end
 
 local activity_timer
 
+-- Local patch (not upstream thumbfast): ytdl_hook's all-formats EDL lists
+-- every format (~57 KB for a 4K YouTube video), which overflows Windows'
+-- 32767-char command line so the subprocess never starts. Keep only the
+-- smallest video stream at least min_h tall (else the tallest); it is also
+-- far cheaper to decode for a thumbnail than the playing 4K stream.
+local edl_trimmed = false
+
+local function split_edl(s)
+    -- entries end at ';'; %N% prefixes a raw N-byte value that may contain ';'
+    local entries, cur, i = {}, {}, 1
+    while i <= #s do
+        local j = s:find("[;%%]", i) or #s + 1
+        cur[#cur + 1] = s:sub(i, j - 1)
+        local len, after = s:match("^%%(%d+)%%()", j)
+        if len then
+            cur[#cur + 1] = s:sub(j, after + len - 1)
+            i = after + len
+        elseif s:sub(j, j) == "%" then
+            cur[#cur + 1] = "%"
+            i = j + 1
+        else
+            entries[#entries + 1] = table.concat(cur)
+            cur = {}
+            i = j + 1
+        end
+    end
+    if #cur > 0 then entries[#entries + 1] = table.concat(cur) end
+    return entries
+end
+
+local function edl_one_video(path, min_h)
+    if path:sub(1, 6) ~= "edl://" then return nil end
+    local streams, cur = {}, nil
+    for _, e in ipairs(split_edl(path:sub(7))) do
+        if e == "!new_stream" then
+            cur = {e}
+            streams[#streams + 1] = cur
+        elseif cur then
+            cur[#cur + 1] = e
+        end
+    end
+    local best, best_h
+    for _, st in ipairs(streams) do
+        for _, e in ipairs(st) do
+            local h = e:match("^!delay_open,.*media_type=video.*,h=(%d+)")
+            h = tonumber(h)
+            if h and (best_h == nil
+                or (h >= min_h and (best_h < min_h or h < best_h))
+                or (h < min_h and best_h < min_h and h > best_h)) then
+                best, best_h = st, h
+            end
+        end
+    end
+    if best == nil then return nil end
+    return "edl://" .. table.concat(best, ";")
+end
+
 local function spawn(time)
     if disabled then return end
 
@@ -457,6 +514,12 @@ local function spawn(time)
     remove_thumbnail_files()
 
     local vid = properties["vid"]
+    local one_video = ytdl and edl_one_video(path, effective_h) or nil
+    edl_trimmed = one_video ~= nil
+    if edl_trimmed then
+        path = one_video
+        vid = 1
+    end
     has_vid = vid or 0
 
     local args = {
@@ -885,6 +948,8 @@ local function sync_changes(prop, val)
     end
 
     if not spawned then return end
+    -- the trimmed EDL has one video track; the player's vid does not map onto it
+    if prop == "vid" and edl_trimmed then return end
 
     run("set "..prop.." "..val)
     dirty = true

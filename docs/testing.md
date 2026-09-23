@@ -215,6 +215,16 @@ The lists themselves are fetched by `browse.lua` into `%TEMP%\mpv-browse-thumbs\
 
 A `quit` issued while a script is still loading hangs mpv; the test quits from a timer for that reason. Do the same in any probe.
 
+**Seekbar thumbnails on YouTube** (`thumbfast.lua`), real config, needs network. Fails with `create_failed=true` if the thumbnailer's command line overflows Windows' 32767-char limit again:
+
+```sh
+./mpv.exe --geometry=640x360 --no-resume-playback --save-position-on-quit=no --volume=0 \
+  --msg-level=all=no,thumbfast_youtube_test=info --script=docs/tests/thumbfast_youtube_test.lua \
+  "https://www.youtube.com/watch?v=aqz-KE-bpKQ" 2>&1 | grep -E "FAIL|ALL PASS"
+```
+
+Send `thumb` repeatedly, as ModernZ does on every redraw while hovering; a single request never produces a thumbnail.
+
 **Fake index for the UI path.** Serve an RSS file locally and point the script-opts at it; `{query}` is substituted, the server ignores it:
 
 ```sh
