@@ -132,6 +132,7 @@ MPV/
     ├── scripts/
     │   ├── browse.lua                    ← YouTube/Twitch/torrent-index search and feeds inside mpv (echo-HC)
     │   ├── browse_torrents.lua           ← pure Lua feed/title parsing and ordering for the Torrents source (unit test in docs/tests)
+    │   ├── whichkey.lua                  ← which-key panel: press g or b to see and run the bindings under it (test in docs/tests)
     │   ├── modernz.lua                   ← OSC UI
     │   ├── vsr_autocrop.lua              ← RTX VSR upscaler + crop-aware auto-crop, one integrated script (Echostorm)
     │   ├── screenshotfolder_echostorm.lua← organized screenshots (Echostorm)
