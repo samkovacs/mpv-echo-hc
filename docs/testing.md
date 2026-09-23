@@ -113,6 +113,12 @@ grep -i -E "vsr_autocrop|d3d11vpp|video-crop" vsr.log | head -40
 
 With a shader profile active the script must log that VSR is skipped (ADR-0002). Crop detection retries at 4 / 20 / 65 / 185 s, so a 2.39:1 test needs a clip with real black bars (`pad=` in ffmpeg) and at least 25 s of playback.
 
+Crop retries must not drop frames once `@vsr` is in the chain (any `vf` change then rebuilds it: "dropping frame due to pin disconnect"), and a full-frame logo intro must not stop a later retry finding 2.39:1 bars. ~55 s:
+
+```sh
+sh docs/tests/vsr_autocrop_hitch_test.sh   # PASS: 0 drops without bars; crop found after the logo
+```
+
 autodeint (Ctrl+d) must put its filters before `@vsr`, undo them on the next file and survive a file change mid-detection. Needs a window larger than the clip so `@vsr` is in the chain:
 
 ```sh

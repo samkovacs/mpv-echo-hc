@@ -94,6 +94,7 @@ local command_prefix = options.suppress_osd and "no-osd" or ""
 local timers = {
     settle = nil,
     detect_crop = nil,
+    sample = nil,
     crop_confirm = nil,
     retry = nil,
 }
@@ -220,6 +221,7 @@ local function clear_all()
     remove_cropdetect()
     kill_timer("settle")
     kill_timer("detect_crop")
+    kill_timer("sample")
     kill_timer("crop_confirm")
     kill_timer("retry")
     unwatch_crop_confirm()
@@ -491,10 +493,44 @@ end
 
 -- Reads cropdetect's vf-metadata, validates it (mirrors mpv core's
 -- autocrop.lua checks), and hands off to apply_combined().
+-- Union of the valid cropdetect rectangles sampled during this detection.
+local crop_union = nil
+
+-- cropdetect (reset=N) reports the bounds since its last reset, which may be
+-- only a frame or two old at any single read -- so a detection samples it
+-- every 0.1 s across its window and keeps the union of the valid readings.
+local function sample_cropdetect()
+    local m = mp.get_property_native("vf-metadata/" .. cropdetect_label)
+    local w = m and tonumber(m["lavfi.cropdetect.w"])
+    local h = m and tonumber(m["lavfi.cropdetect.h"])
+    local x = m and tonumber(m["lavfi.cropdetect.x"])
+    local y = m and tonumber(m["lavfi.cropdetect.y"])
+    if not (w and h and x and y and w > 0 and h > 0 and x >= 0 and y >= 0) then return end
+    if not crop_union then
+        crop_union = {x1 = x, y1 = y, x2 = x + w, y2 = y + h}
+    else
+        crop_union.x1, crop_union.y1 = math.min(crop_union.x1, x), math.min(crop_union.y1, y)
+        crop_union.x2, crop_union.y2 = math.max(crop_union.x2, x + w), math.max(crop_union.y2, y + h)
+    end
+end
+
 local function finish_detection()
-    local metadata = mp.get_property_native("vf-metadata/" .. cropdetect_label)
-    remove_cropdetect()
+    sample_cropdetect()
+    kill_timer("sample")
     kill_timer("detect_crop")
+    -- cropdetect stays in the chain for the rest of the file (clear_all()
+    -- removes it): inserting or removing a filter once @vsr is in the chain
+    -- rebuilds it and drops a frame ("pin disconnect"), which every retry
+    -- on a bar-less film used to pay twice.
+    local metadata = nil
+    if crop_union then
+        metadata = {
+            ["lavfi.cropdetect.w"] = crop_union.x2 - crop_union.x1,
+            ["lavfi.cropdetect.h"] = crop_union.y2 - crop_union.y1,
+            ["lavfi.cropdetect.x"] = crop_union.x1,
+            ["lavfi.cropdetect.y"] = crop_union.y1,
+        }
+    end
 
     local raw_width  = mp.get_property_native("width")
     local raw_height = mp.get_property_native("height")
@@ -538,7 +574,7 @@ local function finish_detection()
             mp.msg.info("Crop area too large, skipping (try lowering detect_min_ratio).")
         end
     else
-        mp.msg.warn("No cropdetect data -- was the filter inserted successfully?")
+        mp.msg.info("No usable cropdetect reading (window all black, or the filter is missing).")
     end
 
     -- Apply now regardless: VSR should not wait on a crop retry, and if a
@@ -588,11 +624,25 @@ local function start_detection()
         return
     end
 
-    mp.command(string.format(
-        "%s vf pre @%s:cropdetect=limit=%s:round=%d:reset=0",
-        command_prefix, cropdetect_label, options.detect_limit, options.detect_round
-    ))
+    -- Inserted once per file (before @vsr exists on the first attempt, so
+    -- free) and left in; retries reuse it. reset=N: bounds restart every
+    -- detection-window of frames, so a full-frame studio logo early on does
+    -- not pin the union to full frame for the rest of the film.
+    local present = false
+    for _, f in ipairs(mp.get_property_native("vf") or {}) do
+        if f.label == cropdetect_label then present = true end
+    end
+    if not present then
+        local fps = mp.get_property_number("container-fps") or 24
+        mp.command(string.format(
+            "%s vf pre @%s:cropdetect=limit=%s:round=%d:reset=%d",
+            command_prefix, cropdetect_label, options.detect_limit, options.detect_round,
+            math.max(1, math.floor(fps * options.detect_seconds + 0.5))
+        ))
+    end
 
+    crop_union = nil
+    timers.sample = mp.add_periodic_timer(0.1, sample_cropdetect)
     timers.detect_crop = mp.add_timeout(options.detect_seconds, finish_detection)
 end
 
