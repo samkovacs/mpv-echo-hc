@@ -1,4 +1,4 @@
-<p align="center"><img src="doc/header.svg" width="100%" alt="mpv echo-HC edition: portable Windows mpv tuned for NVIDIA RTX Video Super Resolution, with a built-in YouTube, Twitch and anime browser"></p>
+<p align="center"><img src="docs/images/header.svg" width="100%" alt="mpv echo-HC edition: portable Windows mpv tuned for NVIDIA RTX Video Super Resolution, with a built-in YouTube, Twitch and anime browser"></p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-268BD2?style=flat-square&labelColor=073642"></a>
@@ -44,31 +44,31 @@ A fork of [Echo-Storm's MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia
 <table>
 <tr>
 <td width="50%">
-<img src="doc/mpv_player_osc.jpg" width="100%" alt="ModernZ OSC in Solarized Dark with a seekbar thumbnail preview">
+<img src="docs/images/mpv_player_osc.jpg" width="100%" alt="ModernZ OSC in Solarized Dark with a seekbar thumbnail preview">
 <p align="center"><sub><b>Player</b>: ModernZ OSC, Solarized gradient seekbar, thumbfast preview</sub></p>
 </td>
 <td width="50%">
-<img src="doc/mpv_rightclick_menu.jpg" width="100%" alt="Solarized OSD right-click menu with the Open submenu expanded">
+<img src="docs/images/mpv_rightclick_menu.jpg" width="100%" alt="Solarized OSD right-click menu with the Open submenu expanded">
 <p align="center"><sub><b>Right-click menu</b>: <code>menu.conf</code> drawn on the OSD, Open &gt; YouTube / Twitch / Torrents</sub></p>
 </td>
 </tr>
 <tr>
 <td width="50%">
-<img src="doc/mpv_browse_list.jpg" width="100%" alt="browse.lua list view of YouTube search results">
+<img src="docs/images/mpv_browse_list.jpg" width="100%" alt="browse.lua list view of YouTube search results">
 <p align="center"><sub><b>Browse</b>: YouTube search, list view (<kbd>Ctrl</kbd>+<kbd>y</kbd>)</sub></p>
 </td>
 <td width="50%">
-<img src="doc/mpv_browse_grid.jpg" width="100%" alt="browse.lua thumbnail grid of the same results">
+<img src="docs/images/mpv_browse_grid.jpg" width="100%" alt="browse.lua thumbnail grid of the same results">
 <p align="center"><sub><b>Browse</b>: same results, thumbnail grid (<kbd>Tab</kbd>)</sub></p>
 </td>
 </tr>
 <tr>
 <td width="50%">
-<img src="doc/mpv_whichkey.jpg" width="100%" alt="which-key panel listing the bindings under the b prefix">
+<img src="docs/images/mpv_whichkey.jpg" width="100%" alt="which-key panel listing the bindings under the b prefix">
 <p align="center"><sub><b>Which-key</b>: press <kbd>b</kbd> (browse) or <kbd>g</kbd> (lists) to see what follows</sub></p>
 </td>
 <td width="50%">
-<img src="doc/mpv_stats.jpg" width="100%" alt="mpv stats on a Solarized pane showing the d3d11vpp VSR filter at 1.33x">
+<img src="docs/images/mpv_stats.jpg" width="100%" alt="mpv stats on a Solarized pane showing the d3d11vpp VSR filter at 1.33x">
 <p align="center"><sub><b>Stats</b> (<kbd>i</kbd>), on the same pane: <code>@vsr: d3d11vpp scale=1.3333 scaling-mode=nvidia</code> on a 1080p clip</sub></p>
 </td>
 </tr>
@@ -201,7 +201,7 @@ The complete list is in `portable_config/input.conf`, or press <kbd>g</kbd> <kbd
 - **RTX VSR** starts about 4 seconds into playback (3 s hardware-decode settle, 1 s crop detection) and scales to native resolution. It only applies when the *cropped* picture is below display resolution and hardware decoded. Crop detection retries at 4 / 20 / 65 / 185 s without dropping frames.
 - **Auto-crop** runs in the same evaluation that picks VSR's scale factor, so the two cannot be separate scripts. <kbd>c</kbd> toggles manually; auto-crop mode itself is in the right-click *Video* menu.
 - **Shaders:** `profiles.conf` ships `ArtCNN`, `ArtCNN-DS`, `NNEDI3`, `NNEDI3+`, `Ravu-Zoom`, `FSRCNNX`, `FSRCNNX+`, `Anime4K` and two deband strengths, selectable with `--profile=` or right-click *Profiles*. SubsPlease, Erai-raws, HorribleSubs and HatSubs files get `ArtCNN_C4F16_DS` automatically.
-- **Shaders and VSR do not stack.** d3d11's video processor scales before any shader runs, so `vsr_autocrop.lua` skips VSR when a shader is set. Measurements in [`doc/research-rtx-vsr-vs-shaders.md`](doc/research-rtx-vsr-vs-shaders.md).
+- **Shaders and VSR do not stack.** d3d11's video processor scales before any shader runs, so `vsr_autocrop.lua` skips VSR when a shader is set. Measurements in [`docs/research/research-rtx-vsr-vs-shaders.md`](docs/research/research-rtx-vsr-vs-shaders.md).
 - Only the ArtCNN **C4F16** builds work on `gpu-api=d3d11`. C4F32 and the `_CMP` compute builds exceed d3d11's constant-buffer and shared-memory limits and are silently disabled ([ADR 0003](docs/adr/0003-artcnn-c4f16-only-on-d3d11.md)).
 
 </details>
@@ -219,7 +219,7 @@ The complete list is in `portable_config/input.conf`, or press <kbd>g</kbd> <kbd
 <details>
 <summary><b>🎨 Interface</b></summary>
 
-- **ModernZ v0.3.3** with the fluent icon theme is the only OSC ([why not uosc](doc/research-osc-modernz-vs-uosc.md)). A local patch adds `seekbar_shimmer`: the progress bar is an animated blue → cyan → green gradient (`modernz.conf`).
+- **ModernZ v0.3.3** with the fluent icon theme is the only OSC ([why not uosc](docs/research/research-osc-modernz-vs-uosc.md)). A local patch adds `seekbar_shimmer`: the progress bar is an animated blue → cyan → green gradient (`modernz.conf`).
 - **Solarized Dark** everywhere: ModernZ, OSD messages, the right-click menu, console and `select.lua` menus, the pause indicator, the browser, the which-key panel and the stats page share one translucency level and a thin base01 edge. Stats uses a patched local copy of mpv's `stats.lua` (`scripts/stats.lua`, re-sync steps in `docs/testing.md`).
 - **Which-key panel** (`whichkey.lua`): press a prefix key and see its bindings.
 - **Thumbnails** on the seekbar for local files and streams, YouTube and Twitch VODs included (thumbfast).
@@ -260,7 +260,7 @@ The complete list is in `portable_config/input.conf`, or press <kbd>g</kbd> <kbd
 
 A small WPF panel for the settings worth flipping without opening a config file: audio / subtitle language priority, interpolation, debanding, auto-crop, RTX Video HDR, HDR display mode, video sync, surround preference, the two opt-in audio fixes, chapter skip, stream thumbnails, stream cache size, max stream quality and the stream auto-reload triggers.
 
-<p align="center"><img src="doc/configuration_manager.png" width="420" alt="Configuration Manager window"></p>
+<p align="center"><img src="docs/images/configuration_manager.png" width="420" alt="Configuration Manager window"></p>
 
 - Rewrites only the lines it changes. Comments and every other setting in `mpv.conf` and `script-opts/*.conf` stay where they were.
 - Changes apply the next time mpv starts; it edits files, it does not talk to a running player.
@@ -280,10 +280,12 @@ MPV/
 ├── 3_Configuration_Manager.ps1                         ← checkbox/dropdown panel for common config toggles
 ├── X1_Remove_Supported_File_types_From_Open_With.ps1   ← uninstall (reverses script 2)
 ├── yt-dlp-cookies.txt                                  ← your login cookies, gitignored (Installation step 3)
-├── doc/                                                ← screenshots, banner, manual.pdf, research notes
 ├── docs/
 │   ├── adr/                                            ← decision records (why things are the way they are)
+│   ├── images/                                         ← README banner and screenshots, mpv binding chart
+│   ├── research/                                       ← measured write-ups (VSR vs shaders, ModernZ vs uosc)
 │   ├── tests/                                          ← Lua and shell tests, run under mpv
+│   ├── manual.pdf                                      ← mpv manual
 │   └── testing.md                                      ← how to verify changes: synthetic clips, probes, UI driving
 ├── webtorrent/                                         ← bun project vendoring webtorrent-mpv-hook (+ patch)
 └── portable_config/
@@ -421,9 +423,9 @@ It edits the files mpv reads at launch. Restart mpv.
 | [`CONTEXT.md`](CONTEXT.md) | Glossary of the project's terms |
 | [`docs/adr/`](docs/adr/) | Architecture decision records |
 | [`docs/testing.md`](docs/testing.md) | Synthetic test clips, probes, how to drive the UI from a script, the test suite |
-| [`doc/research-rtx-vsr-vs-shaders.md`](doc/research-rtx-vsr-vs-shaders.md) | Why shaders and VSR cannot stack, with measurements |
-| [`doc/research-osc-modernz-vs-uosc.md`](doc/research-osc-modernz-vs-uosc.md) | Why ModernZ is the only OSC |
-| `doc/manual.pdf`, `doc/mpbindings.png` | mpv manual and default binding chart |
+| [`docs/research/research-rtx-vsr-vs-shaders.md`](docs/research/research-rtx-vsr-vs-shaders.md) | Why shaders and VSR cannot stack, with measurements |
+| [`docs/research/research-osc-modernz-vs-uosc.md`](docs/research/research-osc-modernz-vs-uosc.md) | Why ModernZ is the only OSC |
+| `docs/manual.pdf`, `docs/images/mpbindings.png` | mpv manual and default binding chart |
 
 Issues and requests: [GitHub Issues](https://github.com/samkovacs/mpv-echo-hc/issues).
 
