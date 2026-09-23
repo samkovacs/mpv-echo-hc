@@ -1,11 +1,14 @@
 diff --git a/node_modules/webtorrent-mpv-hook/.bun-tag-53bff1a676c84248 b/.bun-tag-53bff1a676c84248
 new file mode 100644
 index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/node_modules/webtorrent-mpv-hook/.bun-tag-6303f6ea56225d4c b/.bun-tag-6303f6ea56225d4c
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/build/webtorrent.js b/build/webtorrent.js
-index 20647efadd18de0b9ead807b89a8080ec3e7e85d..a3aa7c76d1d7472114592c9797c875fba3f7639c 100644
+index 20647efadd18de0b9ead807b89a8080ec3e7e85d..4d4cbc240829fb12b1f9a80f0b93f0ec039ba3db 100644
 --- a/build/webtorrent.js
 +++ b/build/webtorrent.js
-@@ -11,6 +11,9 @@ var __assign = (this && this.__assign) || function () {
+@@ -11,8 +11,14 @@ var __assign = (this && this.__assign) || function () {
      return __assign.apply(this, arguments);
  };
  var webTorrentRunning = false;
@@ -14,8 +17,51 @@ index 20647efadd18de0b9ead807b89a8080ec3e7e85d..a3aa7c76d1d7472114592c9797c875fb
 +var runningCommand = null;
  var active = false;
  var initialyActive = false;
++// file loaded but its first frame not shown yet (still buffering from
++// peers): keep the transfer overlay up until playback starts
++var buffering = false;
  var overlayText = '';
-@@ -105,7 +108,15 @@ function onFileLoaded() {
+ var playlist = [];
+ // Sync with options in webtorrent.node.ts
+@@ -42,7 +48,7 @@ var options = {
+ mp.options.read_options(options);
+ options.path = mp.command_native(['expand-path', options.path], "");
+ function keyPressHandler() {
+-    if (active || initialyActive) {
++    if (active || initialyActive || buffering) {
+         clearOverlay();
+     }
+     else {
+@@ -58,7 +64,7 @@ function printOverlay() {
+     if (!overlayText) {
+         return;
+     }
+-    if (active || initialyActive) {
++    if (active || initialyActive || buffering) {
+         var expanded = mp.command_native(['expand-text', overlayText], "");
+         mp.osd_message(expanded, 10);
+     }
+@@ -66,6 +72,7 @@ function printOverlay() {
+ function clearOverlay() {
+     active = false;
+     initialyActive = false;
++    buffering = false;
+     mp.osd_message('', 0);
+ }
+ function openPlaylist() {
+@@ -100,12 +107,27 @@ function onInfo() {
+ }
+ function onFileLoaded() {
+     initialyActive = false;
++    buffering = true;
++}
++function onPlaybackRestart() {
++    if (!buffering) {
++        return; // a seek, not the first frame: leave the OSD alone
++    }
++    buffering = false;
+     if (!active) {
+         clearOverlay();
      }
  }
  function onIdleActiveChange(name, idleActive) {
@@ -32,7 +78,7 @@ index 20647efadd18de0b9ead807b89a8080ec3e7e85d..a3aa7c76d1d7472114592c9797c875fb
          mp.set_property('pause', 'yes');
          setTimeout(openPlaylist, 1000);
      }
-@@ -124,6 +135,12 @@ function onLoadHook() {
+@@ -124,6 +146,12 @@ function onLoadHook() {
          else if (/\.torrent$/i.test(url)) {
              runHook(url);
          }
@@ -45,7 +91,7 @@ index 20647efadd18de0b9ead807b89a8080ec3e7e85d..a3aa7c76d1d7472114592c9797c875fb
          else {
              var basename = url.split('/').pop() || '';
              if (/^[0-9A-F]{40}$/i.test(basename)) {
-@@ -142,18 +159,21 @@ function onLoadHook() {
+@@ -142,18 +170,21 @@ function onLoadHook() {
      catch (_e) {
          var e = _e;
          mp.msg.error(e.message);
@@ -68,8 +114,11 @@ index 20647efadd18de0b9ead807b89a8080ec3e7e85d..a3aa7c76d1d7472114592c9797c875fb
      mp.set_property('idle', 'yes');
      mp.set_property('force-window', 'yes');
      mp.set_property('keep-open', 'yes');
-@@ -164,14 +184,38 @@ function runHook(url) {
+@@ -162,16 +193,42 @@ function runHook(url) {
+     mp.register_script_message('playlist', onPlaylist);
+     mp.register_script_message('info', onInfo);
      mp.register_event('file-loaded', onFileLoaded);
++    mp.register_event('playback-restart', onPlaybackRestart);
      mp.observe_property('idle-active', 'bool', onIdleActiveChange);
      var args = __assign({ torrentId: url, socketName: socketName }, options);
 -    mp.command_native_async({
@@ -103,13 +152,14 @@ index 20647efadd18de0b9ead807b89a8080ec3e7e85d..a3aa7c76d1d7472114592c9797c875fb
 +    mp.unregister_script_message('playlist');
 +    mp.unregister_script_message('info');
 +    mp.unregister_event(onFileLoaded);
++    mp.unregister_event(onPlaybackRestart);
 +    mp.unobserve_property(onIdleActiveChange);
 +    mp.remove_key_binding('toggle-info');
 +}
  function getSocketName() {
      var socketName = mp.get_property('input-ipc-server');
      if (!socketName) {
-@@ -203,24 +247,19 @@ function getNodeScriptPath() {
+@@ -203,24 +260,19 @@ function getNodeScriptPath() {
      }
  }
  function onWebTorrentExit(success, _result) {
