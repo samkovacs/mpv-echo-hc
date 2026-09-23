@@ -1,5 +1,8 @@
+diff --git a/node_modules/webtorrent-mpv-hook/.bun-tag-53bff1a676c84248 b/.bun-tag-53bff1a676c84248
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 diff --git a/build/webtorrent.js b/build/webtorrent.js
-index 20647efadd18de0b9ead807b89a8080ec3e7e85d..1b5cf99347629de94da57e913633eb7d82dd97cd 100644
+index 20647efadd18de0b9ead807b89a8080ec3e7e85d..a3aa7c76d1d7472114592c9797c875fba3f7639c 100644
 --- a/build/webtorrent.js
 +++ b/build/webtorrent.js
 @@ -11,6 +11,9 @@ var __assign = (this && this.__assign) || function () {
@@ -12,7 +15,44 @@ index 20647efadd18de0b9ead807b89a8080ec3e7e85d..1b5cf99347629de94da57e913633eb7d
  var active = false;
  var initialyActive = false;
  var overlayText = '';
-@@ -148,12 +151,14 @@ function runHook(url) {
+@@ -105,7 +108,15 @@ function onFileLoaded() {
+     }
+ }
+ function onIdleActiveChange(name, idleActive) {
+-    if (idleActive && playlist.length) {
++    if (!idleActive) {
++        return;
++    }
++    // Idle after a file has played means the user pressed stop: end the
++    // transfer instead of reloading the torrent over their stop.
++    if (!initialyActive) {
++        stopWebTorrent();
++    }
++    else if (playlist.length) {
+         mp.set_property('pause', 'yes');
+         setTimeout(openPlaylist, 1000);
+     }
+@@ -124,6 +135,12 @@ function onLoadHook() {
+         else if (/\.torrent$/i.test(url)) {
+             runHook(url);
+         }
++        else if (webTorrentRunning && !/^http:\/\/localhost:\d+\/webtorrent\//.test(url)) {
++            // Anything but this torrent's own files: stop the transfer
++            // rather than keep downloading/seeding until mpv exits.
++            mp.msg.info('Non-torrent file loaded, stopping WebTorrent');
++            stopWebTorrent();
++        }
+         else {
+             var basename = url.split('/').pop() || '';
+             if (/^[0-9A-F]{40}$/i.test(basename)) {
+@@ -142,18 +159,21 @@ function onLoadHook() {
+     catch (_e) {
+         var e = _e;
+         mp.msg.error(e.message);
++        mp.osd_message('WebTorrent: ' + e.message, 5);
+     }
+ }
+ function runHook(url) {
      mp.msg.info('Running WebTorrent hook');
      mp.set_property('stream-open-filename', 'null://');
      if (webTorrentRunning) {
@@ -28,7 +68,7 @@ index 20647efadd18de0b9ead807b89a8080ec3e7e85d..1b5cf99347629de94da57e913633eb7d
      mp.set_property('idle', 'yes');
      mp.set_property('force-window', 'yes');
      mp.set_property('keep-open', 'yes');
-@@ -164,14 +169,38 @@ function runHook(url) {
+@@ -164,14 +184,38 @@ function runHook(url) {
      mp.register_event('file-loaded', onFileLoaded);
      mp.observe_property('idle-active', 'bool', onIdleActiveChange);
      var args = __assign({ torrentId: url, socketName: socketName }, options);
@@ -69,7 +109,7 @@ index 20647efadd18de0b9ead807b89a8080ec3e7e85d..1b5cf99347629de94da57e913633eb7d
  function getSocketName() {
      var socketName = mp.get_property('input-ipc-server');
      if (!socketName) {
-@@ -203,9 +232,7 @@ function getNodeScriptPath() {
+@@ -203,24 +247,19 @@ function getNodeScriptPath() {
      }
  }
  function onWebTorrentExit(success, _result) {
@@ -80,9 +120,15 @@ index 20647efadd18de0b9ead807b89a8080ec3e7e85d..1b5cf99347629de94da57e913633eb7d
      var result = _result;
      if (!success) {
          mp.msg.error('Failed to start WebTorrent');
-@@ -216,11 +243,5 @@ function onWebTorrentExit(success, _result) {
++        mp.osd_message('WebTorrent: failed to start (is node on PATH?)', 5);
+     }
+     else if (result.stderr) {
+         mp.msg.error(result.stderr);
++        mp.osd_message('WebTorrent failed -- see console/log', 5);
+     }
      else if (result.status) {
          mp.msg.error('WebTorrent exited with error');
++        mp.osd_message('WebTorrent exited with error -- see console/log', 5);
      }
 -    mp.unregister_script_message('osd-data');
 -    mp.unregister_script_message('playlist');
