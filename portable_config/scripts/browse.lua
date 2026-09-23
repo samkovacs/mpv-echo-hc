@@ -235,16 +235,29 @@ end
 
 -- Download with Windows' curl (schannel, has the system CA store; the static
 -- ffmpeg build cannot verify TLS certificates), then scale/pad with ffmpeg.
+--
+-- Every redraw (each cursor move) asks for all 12 tiles again. A fetch
+-- already in flight only collects the new callback: without that, a page
+-- still loading started a curl + ffmpeg pair per tile per keypress, all on
+-- the same paths, and one finishing deleted the .img under the others.
+-- ffmpeg writes .part and renames, so a draw never sees a half-written file.
+local pending = {} -- .bgra path -> callbacks waiting on its fetch
 local function ensure_thumb(url, w, h, cb)
     local base = string.format("%s\\%s_%dx%d", THUMB_DIR, djb2(url), w, h)
-    local file, img = base .. ".bgra", base .. ".img"
+    local file, img, part = base .. ".bgra", base .. ".img", base .. ".part"
     if utils.file_info(file) then return cb(file) end
+    if pending[file] then
+        table.insert(pending[file], cb)
+        return
+    end
+    pending[file] = {cb}
     local function fail(step, res)
+        pending[file] = nil
         mp.msg.warn(string.format("thumbnail %s failed: %s %s", step, url, res and res.stderr or ""))
     end
     mp.command_native_async({
         name = "subprocess", playback_only = false, capture_stderr = true,
-        args = {"curl", "-s", "-S", "-L", "--max-time", "10", "-o", img, url},
+        args = {"curl", "-f", "-s", "-S", "-L", "--max-time", "10", "-o", img, url},
     }, function(ok, res)
         if not (ok and res.status == 0) then return fail("download", res) end
         mp.command_native_async({
@@ -252,10 +265,16 @@ local function ensure_thumb(url, w, h, cb)
             args = {ffmpeg_path(), "-y", "-loglevel", "error", "-i", img,
                     "-vf", string.format("scale=%d:%d:force_original_aspect_ratio=decrease," ..
                                          "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=0x002b36", w, h, w, h),
-                    "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "bgra", file},
+                    "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "bgra", part},
         }, function(ok2, res2)
             os.remove(img)
-            if ok2 and res2.status == 0 and utils.file_info(file) then cb(file) else fail("convert", res2) end
+            if not (ok2 and res2.status == 0 and os.rename(part, file)) then
+                os.remove(part)
+                return fail("convert", res2)
+            end
+            local cbs = pending[file]
+            pending[file] = nil
+            for _, c in ipairs(cbs) do c(file) end
         end)
     end)
 end
