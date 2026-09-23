@@ -7,10 +7,9 @@
 -- bug here). For frame-accurate cuts, re-encode the exported clip
 -- afterwards in a real editor.
 --
--- -ss before -i (fast input seek) + -to after -i (output option, absolute
--- position in the ORIGINAL timeline, not relative to -ss) is ffmpeg's own
--- documented pattern for this -- both mark_in/mark_out below are already
--- absolute time-pos values, so no extra math is needed either way.
+-- -ss before -i (fast input seek) resets timestamps to 0, so an output
+-- -to acts as a DURATION, not an end point (measured: -ss 2 -to 4 gave a
+-- 6 s clip). -t with the explicit length says what it means.
 
 local options = {
     save_location = "~~desktop/mpv/clips/",
@@ -86,6 +85,11 @@ local function export_clip()
         mp.osd_message("Nothing playing", 2)
         return
     end
+    -- ytdl streams: path is the page URL, which ffmpeg cannot open.
+    if path:match("^%a[%w+.-]*://") then
+        mp.osd_message("Clip export works on local files only", 2)
+        return
+    end
 
     -- Snapshot the marks this export actually uses -- export runs async,
     -- and the user can set new marks (for the next clip) before this one
@@ -122,7 +126,7 @@ local function export_clip()
             options.ffmpeg_path, "-y",
             "-ss", fmt_time(export_in),
             "-i", path,
-            "-to", fmt_time(export_out),
+            "-t", fmt_time(export_out - export_in),
             "-c", "copy",
             out_path,
         },
