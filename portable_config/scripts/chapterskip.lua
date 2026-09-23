@@ -91,7 +91,7 @@ end
 -- otherwise immediately overwrite an in-memory-only toggle.
 local function toggle_enabled()
     local new_state = not options.enabled
-    mp.commandv("change-list", "script-opts", "append", "chapterskip-enabled=" .. tostring(new_state))
+    mp.commandv("change-list", "script-opts", "append", "chapterskip-enabled=" .. (new_state and "yes" or "no"))
     options.enabled = new_state
     mp.osd_message("chapterskip: " .. (new_state and "enabled" or "disabled"), 2)
 end

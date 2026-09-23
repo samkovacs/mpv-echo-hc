@@ -51,7 +51,7 @@ $mpvConf    = Join-Path $configRoot "mpv.conf"
 $optsDir    = Join-Path $configRoot "script-opts"
 
 $vsrConf      = Join-Path $optsDir "vsr_autocrop.conf"
-$hdrConf      = Join-Path $optsDir "hdr-mode.conf"
+$hdrConf      = Join-Path $optsDir "hdr_mode.conf"
 $chapterConf  = Join-Path $optsDir "chapterskip.conf"
 $surroundConf = Join-Path $optsDir "prefer_surround_echostorm.conf"
 $thumbConf    = Join-Path $optsDir "thumbfast.conf"
