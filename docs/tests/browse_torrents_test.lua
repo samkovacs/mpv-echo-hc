@@ -95,12 +95,32 @@ eq("display no group, 4K", row("Show Title S01 2160p 4K UHD BluRay Remux-GROUP")
 eq("display bare", row("[G] Movie Name"), "[G] |Movie Name|")
 eq("display episode 100+", row("[G] One Piece - 1120 (1080p)"), "[G] |One Piece|  E1120  1080p")
 
+-- Part / Cour: the second half of a split season
+t = T.parse_title("[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 01 [1080p][Multiple Subtitle].mkv")
+eq("Part part", t.part, 2)
+eq("Part episode", t.episode, 1)
+eq("Part show keeps the part (groups halves apart)", t.show, "Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2")
+t = T.parse_title("[SubsPlease] Kusuriya no Hitorigoto S2 Cour 2 - 13 (1080p) [ABCD].mkv")
+eq("Cour part", t.part, 2)
+eq("Cour season", t.season, 2)
+eq("Cour episode", t.episode, 13)
+eq("zero-padded Cour is not a batch range", T.parse_title("[G] Show Cour 02 - 13 (1080p)").episode, 13)
+eq("zero-padded Season is not a batch range", T.parse_title("[G] Show Season 02 - 13 (1080p)").episode, 13)
+eq("no part", T.parse_title("[SubsPlease] Sousou no Frieren - 28 (1080p)").part, nil)
+eq("display Part", row("[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 01 [1080p].mkv"),
+   "[Erai-raws] |Mushoku Tensei II - Isekai Ittara Honki Dasu|  P2 E01  1080p")
+eq("display S2 Cour 2", row("[SubsPlease] Kusuriya no Hitorigoto S2 Cour 2 - 13 (1080p) [ABCD].mkv"),
+   "[SubsPlease] |Kusuriya no Hitorigoto|  S2 P2 E13  1080p")
+
 -- AniList search finds nothing for "Mushoku Tensei S2" or "Frieren Season 1"
 eq("cover query S2", T.cover_query("Mushoku Tensei S2"), "Mushoku Tensei Season 2")
 eq("cover query S02", T.cover_query("Kaiju No. 8 S02"), "Kaiju No. 8 Season 2")
 eq("cover query S1 dropped", T.cover_query("Show Title S01"), "Show Title")
 eq("cover query nth Season kept", T.cover_query("Dandadan 2nd Season"), "Dandadan 2nd Season")
 eq("cover query no season", T.cover_query("Sousou no Frieren"), "Sousou no Frieren")
+-- ... nor for "Show Season 2 Cour 2", but does for "Show Season 2 Part 2"
+eq("cover query S2 Cour 2", T.cover_query("Kusuriya no Hitorigoto S2 Cour 2"), "Kusuriya no Hitorigoto Season 2 Part 2")
+eq("cover query Part kept", T.cover_query("Mushoku Tensei Part 2"), "Mushoku Tensei Part 2")
 
 eq("unparsed title", T.parse_title("[Group][1080p][HEVC]"), nil)
 eq("unparsed extension only", T.parse_title("(1080p) [ABCD].mkv"), nil)

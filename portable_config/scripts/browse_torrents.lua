@@ -67,27 +67,34 @@ function M.parse_title(title)
     if show == "" then return nil end
     -- "01-12" / "01 ~ 24" is a batch, not episode 1. Zero-padded and
     -- ascending only, so "S2 - 07" and "Mob Psycho 100 - 05" stay episodes.
-    local a, b = rest:match("%f[%d](%d%d+)%s*[-~]%s*(%d%d+)%f[%D]")
+    -- "Cour 02 - 13" is part 2, episode 13: drop the numbered words first.
+    local plain = rest:gsub("[Pp]art%s+%d+", ""):gsub("[Cc]our%s+%d+", ""):gsub("[Ss]eason%s+%d+", "")
+    local a, b = plain:match("%f[%d](%d%d+)%s*[-~]%s*(%d%d+)%f[%D]")
     local episodes
     if a and tonumber(a) < tonumber(b) then episodes, episode = a .. "-" .. b, nil end
     local season = rest:match("%f[%w]S(%d+)E%d") or rest:match("%f[%w]S(%d%d?)%f[%W]") or
                    rest:match("%f[%d](%d+)%a%a%s+[Ss]eason") or rest:match("[Ss]eason%s+(%d+)")
+    local part = rest:match("%f[%w][Pp]art%s+(%d+)%f[%D]") or rest:match("%f[%w][Cc]our%s+(%d+)%f[%D]")
     local version = rest:match("%f[%d]%d+v(%d)%f[%D]")
     local res = t:match("%f[%d](%d%d%d%d?)p%f[%A]")
     if res then res = tonumber(res) elseif t:find("%f[%w]4K%f[%W]") or t:find("%f[%d]2160%f[%D]") then res = 2160 end
-    return {group = group, show = show, season = season and tonumber(season), episode = episode and tonumber(episode),
-            episodes = episodes, version = version and tonumber(version), resolution = res}
+    return {group = group, show = show, season = season and tonumber(season), part = part and tonumber(part),
+            episode = episode and tonumber(episode), episodes = episodes, version = version and tonumber(version),
+            resolution = res}
 end
 
 -- Entry -> its results row in three parts: "[Group] ", the show name, and
--- "  S2 E07v2  1080p". browse.lua shortens only the name, so the tags stay
--- visible however long it is. The name drops its season; the tag has it.
+-- "  S2 P2 E07v2  1080p". browse.lua shortens only the name, so the tags
+-- stay visible however long it is. The name drops its season and part (Part
+-- or Cour, both shown as P); the tags have them.
 function M.display(e)
-    local show = e.show:gsub("%s+S%d+$", ""):gsub("%s+%d+%a%a%s+[Ss]eason$", ""):gsub("%s+[Ss]eason%s+%d+$", "")
+    local show = e.show:gsub("%s+[Pp]art%s+%d+$", ""):gsub("%s+[Cc]our%s+%d+$", "")
+    show = show:gsub("%s+S%d+$", ""):gsub("%s+%d+%a%a%s+[Ss]eason$", ""):gsub("%s+[Ss]eason%s+%d+$", "")
     local ep = e.episodes and "E" .. e.episodes or e.episode and string.format("E%02d", e.episode)
     if ep and e.version then ep = ep .. "v" .. e.version end
     local se, tags = {}, {}
     if e.season then se[#se + 1] = "S" .. e.season end
+    if e.part then se[#se + 1] = "P" .. e.part end
     if ep then se[#se + 1] = ep end
     if #se > 0 then tags[1] = table.concat(se, " ") end
     if e.resolution then tags[#tags + 1] = e.resolution .. "p" end
@@ -95,12 +102,15 @@ function M.display(e)
 end
 
 -- Show name -> AniList search string. AniList finds nothing for "Show S2"
--- (nor "Show Season 1": first seasons carry no number), but does for
--- "Show Season 2".
+-- (nor "Show Season 1": first seasons carry no number) or "Show Cour 2",
+-- but does for "Show Season 2" and "Show Part 2".
 function M.cover_query(show)
-    local name, n = show:match("^(.-)%s+S0*(%d+)$")
-    if not name then return show end
-    return n == "1" and name or name .. " Season " .. n
+    local base, part = show:match("^(.-)%s+[Pp]art%s+(%d+)$")
+    if not base then base, part = show:match("^(.-)%s+[Cc]our%s+(%d+)$") end
+    base = base or show
+    local name, n = base:match("^(.-)%s+S0*(%d+)$")
+    if name then base = n == "1" and name or name .. " Season " .. n end
+    return part and base .. " Part " .. tonumber(part) or base
 end
 
 -- ------------------------------------------------------------------ feeds
@@ -174,7 +184,8 @@ function M.parse_feed(xml, group)
             entries[#entries + 1] = {
                 url = url, title = f.title, channel = table.concat(line, " · "),
                 show = parsed.show, group = parsed.group, season = parsed.season, episode = parsed.episode,
-                episodes = parsed.episodes, version = parsed.version, resolution = parsed.resolution, seeders = seeders, size = f.size,
+                part = parsed.part, episodes = parsed.episodes, version = parsed.version,
+                resolution = parsed.resolution, seeders = seeders, size = f.size,
                 trusted = trusted, time = parse_date(f.pubdate) or -#entries, index = #entries + 1,
             }
         end
