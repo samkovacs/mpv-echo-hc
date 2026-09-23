@@ -49,8 +49,8 @@ A fork of [Echo-Storm's MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia
 <p align="center"><sub><b>Player</b>: ModernZ OSC, Solarized gradient seekbar, thumbfast preview</sub></p>
 </td>
 <td width="50%">
-<img src="doc/mpv_rightclick_menu.jpg" width="100%" alt="Native right-click menu with the Open submenu expanded">
-<p align="center"><sub><b>Right-click menu</b>: native <code>menu.conf</code>, Open &gt; YouTube / Twitch / Torrents</sub></p>
+<img src="doc/mpv_rightclick_menu.jpg" width="100%" alt="Solarized OSD right-click menu with the Open submenu expanded">
+<p align="center"><sub><b>Right-click menu</b>: <code>menu.conf</code> drawn on the OSD, Open &gt; YouTube / Twitch / Torrents</sub></p>
 </td>
 </tr>
 <tr>
@@ -69,8 +69,8 @@ A fork of [Echo-Storm's MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia
 <p align="center"><sub><b>Which-key</b>: press <kbd>b</kbd> (browse) or <kbd>g</kbd> (lists) to see what follows</sub></p>
 </td>
 <td width="50%">
-<img src="doc/mpv_stats.jpg" width="100%" alt="mpv stats overlay showing the d3d11vpp VSR filter at 1.33x">
-<p align="center"><sub><b>Stats</b> (<kbd>i</kbd>): <code>@vsr: d3d11vpp scale=1.3333 scaling-mode=nvidia</code> on a 1080p clip</sub></p>
+<img src="doc/mpv_stats.jpg" width="100%" alt="mpv stats on a Solarized pane showing the d3d11vpp VSR filter at 1.33x">
+<p align="center"><sub><b>Stats</b> (<kbd>i</kbd>), on the same pane: <code>@vsr: d3d11vpp scale=1.3333 scaling-mode=nvidia</code> on a 1080p clip</sub></p>
 </td>
 </tr>
 </table>
@@ -85,7 +85,7 @@ A fork of [Echo-Storm's MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia
 | 🌈 **HDR per display** | `hdr-mode.lua` + `mpv-display-plugin` pass HDR through on HDR monitors and inverse tone map SDR to the display's measured peak. |
 | 📺 **Browse inside mpv** | YouTube search and account feeds, Twitch search and live list, and an anime torrent index of your choosing, streamed in memory. List or thumbnail grid, fuzzy filter, mouse and keyboard. |
 | 🧠 **Shaders where they win** | ArtCNN, NNEDI3, RAVU, FSRCNNX, Anime4K profiles. Anime WEB-DL releases get ArtCNN automatically; VSR steps aside when a shader is active. |
-| 🎨 **One theme** | Solarized Dark across ModernZ, OSD, console and select menus, stats graphs, the pause indicator, the browser and the which-key panel. |
+| 🎨 **One theme** | Solarized Dark across ModernZ, OSD, the right-click menu, console and select menus, the stats page, the pause indicator, the browser and the which-key panel. |
 | 📦 **Portable** | Everything lives in one folder. No admin needed except for the optional *Open With* registration. |
 
 ---
@@ -221,10 +221,10 @@ The complete list is in `portable_config/input.conf`, or press <kbd>g</kbd> <kbd
 <summary><b>🎨 Interface</b></summary>
 
 - **ModernZ v0.3.3** with the fluent icon theme is the only OSC ([why not uosc](doc/research-osc-modernz-vs-uosc.md)). A local patch adds `seekbar_shimmer`: the progress bar is an animated blue → cyan → green gradient (`modernz.conf`).
-- **Solarized Dark** everywhere: ModernZ, OSD messages, console and `select.lua` menus, stats graphs, the pause indicator, the browser and the which-key panel share one translucency level and a thin base01 edge.
+- **Solarized Dark** everywhere: ModernZ, OSD messages, the right-click menu, console and `select.lua` menus, the pause indicator, the browser, the which-key panel and the stats page share one translucency level and a thin base01 edge. Stats uses a patched local copy of mpv's `stats.lua` (`scripts/stats.lua`, re-sync steps in `docs/testing.md`).
 - **Which-key panel** (`whichkey.lua`): press a prefix key and see its bindings.
 - **Thumbnails** on the seekbar for local files and streams, YouTube and Twitch VODs included (thumbfast).
-- **Right-click menu:** mpv's native `menu.conf`, extended with Open File / Folder / URL / Subtitle / Audio, the browser sources, stream quality up / down, and runtime toggles for crop, auto-crop mode, chapter skip, interpolation and HDR mode.
+- **Right-click menu:** mpv's OSD-drawn context menu (`load-context-menu=yes`, styled in `script-opts/context_menu.conf`) over `menu.conf`, extended with Open File / Folder / URL / Subtitle / Audio, the browser sources, stream quality up / down, and runtime toggles for crop, auto-crop mode, chapter skip, interpolation and HDR mode.
 - **Fonts:** Netflix Sans (Light, Medium, Bold).
 
 </details>
@@ -301,6 +301,7 @@ MPV/
     │   ├── modernz.lua                   ← OSC (local patch: seekbar_shimmer)
     │   ├── vsr_autocrop.lua              ← RTX VSR + crop-aware auto-crop (Echostorm)
     │   ├── thumbfast.lua                 ← seekbar thumbnails
+    │   ├── stats.lua                     ← mpv's stats page, local copy drawn on the Solarized pane
     │   ├── hdr-mode.lua                  ← per-display HDR target, SDR→HDR inverse tone mapping
     │   ├── display-info.dll              ← mpv-display-plugin, HDR display info for hdr-mode.lua
     │   ├── webtorrent.js                 ← webtorrent-mpv-hook, streams torrents in memory (needs node)
@@ -443,7 +444,7 @@ Full history in [CHANGELOG.md](CHANGELOG.md). Latest:
 
 ### 2026-09-23 — echo-HC v0.04: Solarized Dark, which-key, browser polish
 
-- **Solarized Dark theme** across ModernZ, OSD, console / select menus, stats graphs and the pause indicator; ModernZ patch for an animated gradient seekbar.
+- **Solarized Dark theme** across ModernZ, OSD, the right-click menu, console / select menus, the stats page and the pause indicator; ModernZ patch for an animated gradient seekbar.
 - **`whichkey.lua`**: <kbd>g</kbd> and <kbd>b</kbd> prefix panels.
 - **Browser**: reopen last results, <kbd>Shift</kbd>+<kbd>Enter</kbd> queues, per-source search memory, Twitch live sorted by viewers with uptime; torrent rows show resolved `S##E##` and AniList covers per show.
 - **Fixes**: thumbfast thumbnails for YouTube and cropped Twitch VODs, no VO rebuild at HDR start, crop-detect retries no longer drop frames, `autodeint` ordering before VSR.
