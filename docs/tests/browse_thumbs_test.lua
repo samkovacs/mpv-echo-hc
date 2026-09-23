@@ -2,6 +2,8 @@
 -- cursor move) called ensure_thumb for all 12 tiles, and nothing tracked
 -- downloads already in flight, so a page still loading started a curl +
 -- ffmpeg pair per tile per keypress, all writing the same .img/.bgra paths.
+-- Phase 2: Twitch previews keep one URL for a changing image, so the cached
+-- file must be refetched by age (thumb_max_age) and drawn meanwhile.
 --
 -- Loads the real scripts/browse.lua into this script's Lua state with curl
 -- simulated (1 s latency, no network; ffmpeg runs for real), draws a grid,
@@ -98,18 +100,33 @@ mover = mp.add_periodic_timer(0.2, function()
     if moves == 4 then mover:kill() end -- last redraw at 0.8 s, downloads still in flight
 end)
 
-mp.add_timeout(6, function()
-    local failed = 0
-    local function check(name, cond, got)
-        print((cond and "PASS " or "FAIL ") .. name .. (cond and "" or ("  got: " .. tostring(got))))
-        if not cond then failed = failed + 1 end
-    end
+local failed = 0
+local function check(name, cond, got)
+    print((cond and "PASS " or "FAIL ") .. name .. (cond and "" or ("  got: " .. tostring(got))))
+    if not cond then failed = failed + 1 end
+end
+local url1, url2 = entries[1].thumbnail, entries[2].thumbnail
+
+mp.add_timeout(4, function()
     local max = 0
     for _, n in pairs(curls) do max = math.max(max, n) end
     check("each thumbnail downloaded once despite 4 redraws in flight", max == 1, max)
     local current = 0
     for id = 1, 12 do if adds[id] == list.gen then current = current + 1 end end
     check("all 12 tiles drawn for the final redraw", current == 12, current)
+
+    -- Phase 2: live previews (Twitch) keep one URL, so the cached file is
+    -- refreshed by age. The thumbnails are ~3 s old here.
+    entries[1].thumb_max_age = 1    -- stale
+    entries[2].thumb_max_age = 3600 -- fresh
+    list_draw()
+    check("stale thumbnail still drawn at once while refreshing", adds[1] == list.gen, adds[1])
+end)
+
+mp.add_timeout(6.5, function()
+    check("stale live thumbnail re-downloaded", curls[url1] == 2, curls[url1])
+    check("fresh live thumbnail not re-downloaded", curls[url2] == 1, curls[url2])
+    check("refreshed thumbnail drawn for the current redraw", adds[1] == list.gen, adds[1])
     check("no overlay-add of an incomplete .bgra", bad_adds == 0, bad_adds)
     print(failed == 0 and "ALL PASS" or (failed .. " FAILED"))
     mp.command(failed == 0 and "quit 0" or "quit 1")

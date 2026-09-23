@@ -138,7 +138,7 @@ Drive the UI from a `--script=` Lua rather than by hand. Relevant commands:
 | Window screenshot | `mp.commandv("screenshot-to-file", "out.png", "window")` |
 | What loaded | `print(mp.get_property("path"), mp.get_property("media-title"))` |
 
-Grid thumbnails must be fetched once per tile however often the grid redraws while they load. The test loads the real `browse.lua` with curl simulated (no network) and moves the cursor during the downloads:
+Grid thumbnails must be fetched once per tile however often the grid redraws while they load, and live previews (one URL, changing image) must refresh by age. The test loads the real `browse.lua` with curl simulated (no network) and moves the cursor during the downloads:
 
 ```sh
 T=$(mktemp -d); TEMP=$(cygpath -w "$T") ./mpv.exe --no-config --idle=yes \

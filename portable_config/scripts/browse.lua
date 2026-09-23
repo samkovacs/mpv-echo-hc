@@ -241,11 +241,17 @@ end
 -- still loading started a curl + ffmpeg pair per tile per keypress, all on
 -- the same paths, and one finishing deleted the .img under the others.
 -- ffmpeg writes .part and renames, so a draw never sees a half-written file.
+-- max_age (seconds, optional): live previews keep one URL whose image
+-- changes, so a cached file older than this is drawn at once and refetched.
 local pending = {} -- .bgra path -> callbacks waiting on its fetch
-local function ensure_thumb(url, w, h, cb)
+local function ensure_thumb(url, w, h, cb, max_age)
     local base = string.format("%s\\%s_%dx%d", THUMB_DIR, djb2(url), w, h)
     local file, img, part = base .. ".bgra", base .. ".img", base .. ".part"
-    if utils.file_info(file) then return cb(file) end
+    local info = utils.file_info(file)
+    if info then
+        if not max_age or os.time() - info.mtime < max_age then return cb(file) end
+        cb(file) -- stale: show it now, the callback runs again when refreshed
+    end
     if pending[file] then
         table.insert(pending[file], cb)
         return
@@ -268,6 +274,7 @@ local function ensure_thumb(url, w, h, cb)
                     "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "bgra", part},
         }, function(ok2, res2)
             os.remove(img)
+            if ok2 and res2.status == 0 then os.remove(file) end -- rename cannot replace on Windows
             if not (ok2 and res2.status == 0 and os.rename(part, file)) then
                 os.remove(part)
                 return fail("convert", res2)
@@ -442,7 +449,7 @@ local function draw_grid(W, H)
             ensure_thumb(url, tw, th, function(file)
                 if list.gen ~= gen then return end -- list redrawn or closed meanwhile
                 mp.commandv("overlay-add", k + 1, x, y, file, 0, "bgra", tw, th, tw * 4)
-            end)
+            end, e.thumb_max_age)
         end
     end
     list.ov.data = table.concat(ev, "\n")
@@ -704,6 +711,7 @@ local function twitch_entry(user)
         live_status = "is_live",
         url = "https://www.twitch.tv/" .. user.login,
         thumbnail = s.previewImageURL,
+        thumb_max_age = 300, -- same URL, new frame: refetch after 5 min
     }
 end
 
