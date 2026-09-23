@@ -205,6 +205,14 @@ The last command is the regression test for ADR-0007's `~~home/../` expansion: r
 ./mpv.exe --no-config --idle=once --script=docs/tests/browse_torrents_test.lua 2>&1 | grep -E "FAIL|ALL PASS"; echo exit=${PIPESTATUS[0]}
 ```
 
+**S##E## resolution** (`browse_anime.lua`), same runner, real excerpts of anime-relations and Fribb's anime-list as fixtures:
+
+```sh
+./mpv.exe --no-config --idle=once --script=docs/tests/browse_anime_test.lua 2>&1 | grep -E "FAIL|ALL PASS"; echo exit=${PIPESTATUS[0]}
+```
+
+The lists themselves are fetched by `browse.lua` into `%TEMP%\mpv-browse-thumbs\{seasons,relations}.json` on the first torrent view and refetched after 7 days; delete them to force a fetch. `seasons.json` is Fribb's list slimmed to `{mal_id: {s, o}}` (TVDB season, episode offset). To test a stale list, backdate it and pass `browse-thumb_cache_days=30`: the thumbnail cleanup at script load otherwise deletes anything older than 7 days first.
+
 A `quit` issued while a script is still loading hangs mpv; the test quits from a timer for that reason. Do the same in any probe.
 
 **Fake index for the UI path.** Serve an RSS file locally and point the script-opts at it; `{query}` is substituted, the server ignores it:

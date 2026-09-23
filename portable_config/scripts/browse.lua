@@ -418,6 +418,60 @@ local function ensure_meta(show)
     end)
 end
 
+-- The anime lists behind S##E## (browse_anime.lua): TVDB season / offset
+-- per MAL id (Fribb) and fansub renumbering rules (erengy). Slimmed into
+-- THUMB_DIR and refetched when missing or older than a week; the view does
+-- not wait, rows switch from the filename tag when a list lands. A failed
+-- fetch or an unparsable body keeps the old file.
+local LISTS = {
+    seasons = {url = "https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-full.json",
+               slim = function(body) return anime.slim_seasons(utils.parse_json(body)) end},
+    relations = {url = "https://github.com/erengy/anime-relations/raw/master/anime-relations.txt",
+                 slim = anime.parse_relations},
+}
+local LISTS_MAX_AGE = 7 * 86400
+
+local function ensure_lists()
+    if not utils.file_info(THUMB_DIR) then
+        mp.command_native({name = "subprocess", playback_only = false,
+                           args = {"cmd", "/c", "mkdir", THUMB_DIR}})
+    end
+    for name, l in pairs(LISTS) do
+        local file = string.format("%s\\%s.json", THUMB_DIR, name)
+        local info = utils.file_info(file)
+        if info and not lists[name] then
+            local f = io.open(file, "r")
+            lists[name] = utils.parse_json(f:read("*a") or "")
+            f:close()
+        end
+        if (not info or os.time() - info.mtime > LISTS_MAX_AGE) and not l.pending then
+            l.pending = true
+            mp.command_native_async({
+                name = "subprocess", playback_only = false, capture_stdout = true, capture_stderr = true,
+                args = {"curl", "-s", "-S", "-L", "--fail", "--max-time", "60", l.url},
+            }, function(ok, res)
+                l.pending = false
+                if not ok or res.status ~= 0 then
+                    mp.msg.warn(string.format("anime list %s: fetch failed, keeping the old one: %s",
+                                              name, res and res.stderr or ""))
+                    return
+                end
+                local t, err = l.slim(res.stdout)
+                if not t then
+                    mp.msg.warn(string.format("anime list %s: %s, keeping the old one", name, err))
+                    return
+                end
+                local out = io.open(file, "w")
+                if out then out:write(utils.format_json(t)); out:close() end
+                lists[name] = t
+                for show, m in pairs(metas) do
+                    if type(m) == "table" then apply_meta(show) end
+                end
+            end)
+        end
+    end
+end
+
 local function header_text()
     local n = #list.view
     local h = string.format("{\\b1}%s{\\b0}  %s", colored(C_TITLE, list.prompt),
@@ -892,6 +946,7 @@ end
 
 mp.add_key_binding(nil, "torrent-search", function()
     if opts.torrent_search_url == "" then return torrent_config_message() end
+    ensure_lists()
     input.get({
         prompt = "Torrent search: ",
         submit = function(text)
@@ -907,6 +962,7 @@ end)
 
 mp.add_key_binding(nil, "torrent-new", function()
     if opts.torrent_new_url == "" then return torrent_config_message() end
+    ensure_lists()
     mp.osd_message("browse: fetching new releases...", 30)
     fetch_feed(opts.torrent_new_url, nil, function(entries)
         if entries then show_results("Torrents: new releases", torrents.order(entries)) end
@@ -917,6 +973,7 @@ end)
 -- group), merged into one ordered list once every request has answered.
 mp.add_key_binding(nil, "torrent-followed", function()
     if opts.torrent_search_url == "" then return torrent_config_message() end
+    ensure_lists()
     local shows = torrents.shows(opts.torrent_shows)
     if #shows == 0 then
         mp.osd_message("browse: set torrent_shows=Show A|Group,Show B in script-opts/browse.conf", 8)
