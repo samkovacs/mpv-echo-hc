@@ -28,6 +28,7 @@ local input = require "mp.input"
 -- mpv's require path is ~~/lua, not scripts/; the torrent module lives here
 package.path = debug.getinfo(1, "S").source:match("^@(.*)[/\\]") .. "/?.lua;" .. package.path
 local torrents = require "browse_torrents"
+local anime = require "browse_anime"
 
 local RESULTS = 30
 
@@ -325,6 +326,98 @@ local function list_filter()
     list.cursor = 1
 end
 
+-- Torrents: one AniList search per show name (the first hit's cover and MAL
+-- id), cached on disk beside the thumbnails keyed by the search string;
+-- "{}" records "no hit". Feeds the grid covers and, with the anime lists
+-- (Task 4 of the S##E## plan: ensure_lists), the rows' S##E## tags. A
+-- wrong hit is caught by browse_anime.sxe's season check or is cosmetic.
+local metas = {} -- show -> {url=, mal=} ({} = no hit), or "pending"
+local lists = {} -- relations / seasons: browse_anime tables once loaded
+local list_draw
+
+-- Row text changed under a typed filter: re-match, keep the focused entry.
+local function refresh_view()
+    if not list.ov then return end
+    local row = list.view[list.cursor]
+    local focused = row and row.i
+    list_filter()
+    for k, r in ipairs(list.view) do
+        if r.i == focused then list.cursor = k end
+    end
+    list_draw()
+end
+
+-- Lookups answer from inside a draw (disk cache) or a callback; coalesce
+-- into one redraw after the current one instead of drawing re-entrantly.
+local refresh_pending = false
+local function schedule_refresh()
+    if refresh_pending then return end
+    refresh_pending = true
+    mp.add_timeout(0, function()
+        refresh_pending = false
+        refresh_view()
+    end)
+end
+
+local function apply_entry(e)
+    local m = metas[e.show]
+    if type(m) ~= "table" then return end
+    e.thumbnail = m.url
+    if lists.relations and lists.seasons then
+        local sxe, why = anime.sxe(m.mal, e, lists.relations, lists.seasons)
+        if why then mp.msg.warn(string.format("%s: %s", e.title, why)) end
+        e.sxe = sxe
+    end
+end
+
+local function apply_meta(show)
+    for _, e in ipairs(list.entries) do
+        if e.show == show then apply_entry(e) end
+    end
+    schedule_refresh()
+end
+
+local function ensure_meta(show)
+    if metas[show] ~= nil then return end
+    metas[show] = "pending"
+    -- keyed by the query, not the show: "Show S2" once cached as "no cover"
+    local query = torrents.cover_query(show)
+    local file = string.format("%s\\meta_%s.json", THUMB_DIR, djb2(query))
+    local f = io.open(file, "r")
+    if f then
+        local m = utils.parse_json(f:read("*a") or "")
+        f:close()
+        if type(m) == "table" then
+            metas[show] = m
+            return apply_meta(show)
+        end
+    end
+    mp.command_native_async({
+        name = "subprocess", playback_only = false, capture_stdout = true, capture_stderr = true,
+        args = {"curl", "-s", "-S", "--max-time", "10", "https://graphql.anilist.co",
+                "-H", "Content-Type: application/json", "--data-binary", utils.format_json({
+                    query = "query($s:String){Page(perPage:1){media(search:$s,type:ANIME){idMal coverImage{large}}}}",
+                    variables = {s = query}})},
+    }, function(ok, res)
+        local data = ok and res.status == 0 and utils.parse_json(res.stdout)
+        if not (data and data.data) then
+            -- network error or an AniList error body (429 when rate limited):
+            -- nothing this session, nothing cached, the next mpv start retries
+            mp.msg.warn(string.format("AniList lookup failed: %s %s", show,
+                                      res and (res.stderr .. (res.stdout or "")):sub(1, 200) or ""))
+            metas[show] = {}
+            return apply_meta(show)
+        end
+        local media = data.data.Page and data.data.Page.media
+        local hit = media and media[1]
+        local m = hit and {url = hit.coverImage and hit.coverImage.large, mal = hit.idMal} or {}
+        local out = io.open(file, "w")
+        if out then out:write(utils.format_json(m)); out:close() end
+        metas[show] = m
+        apply_meta(show)
+    end)
+end
+
 local function header_text()
     local n = #list.view
     local h = string.format("{\\b1}%s{\\b0}  %s", colored(C_TITLE, list.prompt),
@@ -355,6 +448,8 @@ local function draw_list(W, H)
     for i = first, last do
         local focused = i == list.cursor
         local row = list.view[i]
+        local e = list.entries[row.i]
+        if e.show then ensure_meta(e.show) end
         lines[#lines + 1] = (focused and colored(C_FOCUS, "▸ ") or "  ") ..
                             label(list.entries[row.i], focused, row.matched, max_chars)
     end
@@ -367,55 +462,6 @@ local function draw_list(W, H)
         string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord1\\3c&H%s&\\shad0}%s",
                       math.floor(20 * s), math.floor(20 * s), math.floor(22 * s), C_BACK,
                       table.concat(lines, "\\N"))
-end
-
--- Show covers for the grid (Torrents source): one AniList search per show
--- name, first hit's cover URL, cached on disk beside the thumbnails keyed
--- by show name (an empty file means "no cover"). A wrong cover is cosmetic.
-local covers = {} -- show -> url, false (none), or "pending"
-local list_draw
-
-local function apply_cover(show, url)
-    covers[show] = url or false
-    for _, e in ipairs(list.entries) do
-        if e.show == show then e.thumbnail = url end
-    end
-    if url and list.ov and list.mode == "grid" then list_draw() end
-end
-
-local function ensure_cover(show)
-    if covers[show] ~= nil then return end
-    covers[show] = "pending"
-    -- keyed by the query, not the show: "Show S2" once cached as "no cover"
-    local query = torrents.cover_query(show)
-    local file = string.format("%s\\cover_%s.txt", THUMB_DIR, djb2(query))
-    local f = io.open(file, "r")
-    if f then
-        local url = f:read("*l")
-        f:close()
-        return apply_cover(show, url and url ~= "" and url or nil)
-    end
-    mp.command_native_async({
-        name = "subprocess", playback_only = false, capture_stdout = true, capture_stderr = true,
-        args = {"curl", "-s", "-S", "--max-time", "10", "https://graphql.anilist.co",
-                "-H", "Content-Type: application/json", "--data-binary", utils.format_json({
-                    query = "query($s:String){Page(perPage:1){media(search:$s,type:ANIME){coverImage{large}}}}",
-                    variables = {s = query}})},
-    }, function(ok, res)
-        local data = ok and res.status == 0 and utils.parse_json(res.stdout)
-        if not (data and data.data) then
-            -- network error or an AniList error body: no cover this session,
-            -- nothing cached, so the next mpv start tries again
-            mp.msg.warn(string.format("cover lookup failed: %s %s", show,
-                                      res and (res.stderr .. (res.stdout or "")):sub(1, 200) or ""))
-            return apply_cover(show, nil)
-        end
-        local media = data.data.Page and data.data.Page.media
-        local url = media and media[1] and media[1].coverImage and media[1].coverImage.large
-        local out = io.open(file, "w")
-        if out then out:write(url or ""); out:close() end
-        apply_cover(show, url)
-    end)
 end
 
 local function draw_grid(W, H)
@@ -466,7 +512,7 @@ local function draw_grid(W, H)
                                     x, y + th + math.floor(3 * s), fs, C_BACK,
                                     (render_title(e, max_chars, focused, row.matched)),
                                     line2)
-        if e.show and not e.thumbnail then ensure_cover(e.show) end
+        if e.show then ensure_meta(e.show) end
         local url = thumb_url(e, tw)
         if url then
             ensure_thumb(url, tw, th, function(file)
@@ -557,6 +603,9 @@ local function show_results(prompt, entries)
     end
     list_close()
     list.entries, list.prompt, list.filter = entries, prompt, ""
+    for _, e in ipairs(entries) do
+        if e.show then apply_entry(e) end
+    end
     if list.mode == "grid" and not utils.file_info(THUMB_DIR) then
         mp.command_native({name = "subprocess", playback_only = false,
                            args = {"cmd", "/c", "mkdir", THUMB_DIR}})
