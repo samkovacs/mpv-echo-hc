@@ -154,6 +154,18 @@ local ent = T.parse_feed(rss("x", {item({{"title", "[G] Show&#8217;s Title &#x20
                                          {"link", "magnet:?xt=urn:btih:00000000000000000000000000000000000000DD"}})}))
 eq("numeric entities above 255 become UTF-8", ent[1].title, "[G] Show" .. string.char(226, 128, 153) .. "s Title " .. string.char(226, 128, 147) .. " 02 (1080p)")
 
+-- Invalid code points (above U+10FFFF, UTF-16 surrogates) used to make
+-- string.char throw inside parse_feed, losing the whole feed for one title.
+local FFFD = string.char(239, 191, 189)
+local okp, inv = pcall(T.parse_feed, rss("x", {
+    item({{"title", "[G] Bad &#9999999; &#xD800; &#99999999999999999999; - 03 (1080p)"},
+          {"link", "magnet:?xt=urn:btih:00000000000000000000000000000000000000EE"}}),
+    item({{"title", "[G] Good Show - 04 (1080p)"},
+          {"link", "magnet:?xt=urn:btih:00000000000000000000000000000000000000FF"}})}))
+check("invalid numeric entity does not throw", okp, inv)
+eq("invalid code points become U+FFFD", okp and inv[1].title, "[G] Bad " .. FFFD .. " " .. FFFD .. " " .. FFFD .. " - 03 (1080p)")
+eq("rest of the feed survives", okp and #inv, 2)
+
 -- not XML
 local bad, err = T.parse_feed("<!doctype html><html><body>blocked</body></html>")
 eq("non-xml returns nil", bad, nil)

@@ -17,8 +17,11 @@ local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 
 local ENTITIES = {amp = "&", lt = "<", gt = ">", quot = '"', apos = "'"}
 
--- code point -> UTF-8 (Lua 5.1 has no utf8.char)
+-- code point -> UTF-8 (Lua 5.1 has no utf8.char). Feed text is untrusted:
+-- past U+10FFFF string.char threw and one title lost the whole feed, so
+-- invalid code points (and UTF-16 surrogates) become U+FFFD.
 local function utf8_char(n)
+    if n > 0x10FFFF or (n >= 0xD800 and n <= 0xDFFF) then n = 0xFFFD end
     if n < 0x80 then return string.char(n) end
     if n < 0x800 then return string.char(0xC0 + math.floor(n / 0x40), 0x80 + n % 0x40) end
     if n < 0x10000 then
