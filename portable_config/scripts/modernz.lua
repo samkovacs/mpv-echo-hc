@@ -140,6 +140,9 @@ local user_opts = {
     cache_info_color = "#FFFFFF",          -- color of the cache information
     seekbar_cache_color = "#B1B1B1",       -- color of the cache ranges on the seekbar
     seekbarfg_color = "#FF8232",           -- color of the seekbar progress
+    seekbar_shimmer = false,               -- local patch: animated gradient on the seekbar progress (replaces seekbarfg_color)
+    seekbar_shimmer_colors = "#268BD2,#2AA198,#859900", -- gradient stops, cycled across the bar
+    seekbar_shimmer_period = 4,            -- seconds for the gradient to drift one bar width
     seekbarbg_color = "#999999",           -- color of the remaining seekbar
     seek_handle_color = "#C96508",         -- color of the seekbar handle
     seek_handle_border_color = "#FF8232",  -- inner border color drawn inside the seekbar handle (set to "disable" to disable)
@@ -1550,6 +1553,53 @@ local function draw_seekbar_progress(element, elem_ass)
     end
 end
 
+-- Local patch (not upstream ModernZ): animated gradient seekbar progress.
+-- libass has no gradient fill, so the progress shape is drawn once per
+-- SHIMMER_SLICE-wide vertical slice, each copy \clip-ed to its slice and
+-- colored by its position plus a time-based drift.
+local SHIMMER_SLICE = 8
+local SHIMMER_FPS = 30
+
+local function shimmer_stops()
+    local stops = {}
+    for hex in user_opts.seekbar_shimmer_colors:gmatch("#(%x%x%x%x%x%x)") do
+        stops[#stops + 1] = {tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16)}
+    end
+    assert(#stops >= 2, "seekbar_shimmer_colors needs at least two #RRGGBB colors, got: " .. user_opts.seekbar_shimmer_colors)
+    return stops
+end
+
+-- color at bar fraction p (0..1, wraps), interpolating the cyclic stop list
+local function shimmer_color(stops, p)
+    local f = (p % 1) * #stops
+    local i = math.floor(f)
+    local a, b, t = stops[i + 1], stops[(i + 1) % #stops + 1], f - i
+    local function mix(k) return math.floor(a[k] + (b[k] - a[k]) * t + 0.5) end
+    return string.format("#%02X%02X%02X", mix(1), mix(2), mix(3))
+end
+
+local function draw_seekbar_shimmer(element, elem_ass, anim_override)
+    local pos = element.slider.posF()
+    if not pos then return end
+    local xp = get_slider_ele_pos_for(element, pos)
+    local elem_geo = element.layout.geometry
+    local x0, y0, _, y1 = get_hitbox_coords(elem_geo.x, elem_geo.y, elem_geo.an, elem_geo.w, elem_geo.h)
+    local stops = shimmer_stops()
+    local drift = mp.get_time() / user_opts.seekbar_shimmer_period
+    for a = 0, xp, SHIMMER_SLICE do
+        local color = shimmer_color(stops, (a + SHIMMER_SLICE / 2) / elem_geo.w - drift)
+        elem_ass:draw_stop()
+        elem_ass:merge(element.style_ass)
+        ass_append_alpha(elem_ass, element.layout.alpha, 0, nil, anim_override)
+        -- clip spans the whole slot height plus the 1px blur/border of seekbar_fg
+        elem_ass:append(string.format("{\\1c&H%s&\\clip(%d,%d,%d,%d)}", osc_color_convert(color),
+            math.floor(x0 + a), math.floor(y0) - 2, math.floor(x0 + a + SHIMMER_SLICE), math.ceil(y1) + 2))
+        elem_ass:merge(element.static_ass)
+        draw_seekbar_progress(element, elem_ass)
+    end
+    state.shimmer_drawn = true
+end
+
 local function render_elements(master_ass, osc_vis, wc_vis)
     local function render_element(n)
         local element = elements[n]
@@ -1647,7 +1697,11 @@ local function render_elements(master_ass, osc_vis, wc_vis)
                 elem_ass:merge(element.static_ass)
 
                 local handle_x, handle_radius, is_active = get_seekbar_handle_pos(element) -- get handle position/radius
-                draw_seekbar_progress(element, elem_ass)
+                if element.name == "seekbar" and user_opts.seekbar_shimmer then
+                    draw_seekbar_shimmer(element, elem_ass, anim_override)
+                else
+                    draw_seekbar_progress(element, elem_ass)
+                end
                 draw_seekbar_ranges(element, elem_ass, handle_x, handle_radius)
                 draw_ab_loop_range(element, elem_ass)
                 draw_seekbar_handle(element, elem_ass, handle_x, handle_radius, anim_override, is_active) -- draw handle on top of progress
@@ -4117,6 +4171,14 @@ tick = function()
     end
     tick_animation("anitype",    "anistart",    "animation")
     tick_animation("wc_anitype", "wc_anistart", "wc_animation", window_controls_enabled())
+
+    -- local patch: keep redrawing at SHIMMER_FPS while the shimmer is on screen
+    if state.shimmer_drawn then
+        state.shimmer_drawn = false
+        if not (state.shimmer_timer and state.shimmer_timer:is_enabled()) then
+            state.shimmer_timer = mp.add_timeout(1 / SHIMMER_FPS, request_tick)
+        end
+    end
 end
 
 local function set_tick_delay(_, display_fps)
