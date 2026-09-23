@@ -186,7 +186,7 @@ local function restore_hdr_profile()
     if not hdr_profile_applied then return end
     hdr_profile_applied = false
     -- Only meaningful for SDR sources we converted. A natively-HDR file has
-    -- the profile applied by profile-cond, which does its own restore.
+    -- the profile applied by profile-cond; [SDR] undoes it on the next file.
     --
     -- This list must mirror exactly what [HDR] in profiles.conf sets, and
     -- nothing else. target-trc/-prim/-peak/-contrast/-colorspace-hint used
