@@ -83,20 +83,39 @@ function M.parse_title(title)
             resolution = res}
 end
 
+-- The episode tag from the filename alone: "S02E07", "E29" (season
+-- unknown), "S01 P2 E13" (part whose offset is unknown), "S01E01-E12" /
+-- "E01-12" (batch), "S01" (season batch). Never guesses a season.
+local function fallback_tag(e)
+    local s = e.season and string.format("S%02d", e.season)
+    local ep
+    if e.episodes then
+        ep = "E" .. (s and not e.part and (e.episodes:gsub("%-", "-E")) or e.episodes)
+    elseif e.episode then
+        ep = string.format("E%02d", e.episode)
+    end
+    if e.part then
+        local t = {}
+        if s then t[#t + 1] = s end
+        t[#t + 1] = "P" .. e.part
+        if ep then t[#t + 1] = ep end
+        return table.concat(t, " ")
+    end
+    return (s or "") .. (ep or "")
+end
+
 -- Entry -> its results row in three parts: "[Group] ", the show name, and
--- "  S2 P2 E07v2  1080p". browse.lua shortens only the name, so the tags
--- stay visible however long it is. The name drops its season and part (Part
--- or Cour, both shown as P); the tags have them.
+-- "  S02E07v2  1080p". The tag is e.sxe (TVDB numbering, set by browse.lua
+-- once the anime lists answer) or the filename fallback. browse.lua
+-- shortens only the name, so the tags stay visible however long it is. The
+-- name drops its season and part (Part or Cour); the tag has them.
 function M.display(e)
     local show = e.show:gsub("%s+[Pp]art%s+%d+$", ""):gsub("%s+[Cc]our%s+%d+$", "")
     show = show:gsub("%s+S%d+$", ""):gsub("%s+%d+%a%a%s+[Ss]eason$", ""):gsub("%s+[Ss]eason%s+%d+$", "")
-    local ep = e.episodes and "E" .. e.episodes or e.episode and string.format("E%02d", e.episode)
-    if ep and e.version then ep = ep .. "v" .. e.version end
-    local se, tags = {}, {}
-    if e.season then se[#se + 1] = "S" .. e.season end
-    if e.part then se[#se + 1] = "P" .. e.part end
-    if ep then se[#se + 1] = ep end
-    if #se > 0 then tags[1] = table.concat(se, " ") end
+    local tag = e.sxe or fallback_tag(e)
+    if tag ~= "" and e.version and (e.episode or e.episodes) then tag = tag .. "v" .. e.version end
+    local tags = {}
+    if tag ~= "" then tags[1] = tag end
     if e.resolution then tags[#tags + 1] = e.resolution .. "p" end
     return e.group and "[" .. e.group .. "] " or "", show, #tags > 0 and "  " .. table.concat(tags, "  ") or ""
 end

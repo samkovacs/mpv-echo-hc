@@ -86,14 +86,19 @@ local function row(title)
     return table.concat({T.display(p)}, "|")
 end
 eq("display S2", row("[SubsPlease] Mushoku Tensei S2 - 07 (1080p) [A1B2C3D4].mkv"),
-   "[SubsPlease] |Mushoku Tensei|  S2 E07  1080p")
-eq("display nth Season, version", row(long), "[Erai-raws] |Mushoku Tensei - Isekai Ittara Honki Dasu|  S2 E07v2  1080p")
+   "[SubsPlease] |Mushoku Tensei|  S02E07  1080p")
+eq("display nth Season, version", row(long), "[Erai-raws] |Mushoku Tensei - Isekai Ittara Honki Dasu|  S02E07v2  1080p")
 eq("display no season", row("[SubsPlease] Sousou no Frieren - 28 (1080p) [A1B2].mkv"),
    "[SubsPlease] |Sousou no Frieren|  E28  1080p")
 eq("display batch", row("[SubsPlease] Show Name (01-12) (1080p) [Batch]"), "[SubsPlease] |Show Name|  E01-12  1080p")
-eq("display no group, 4K", row("Show Title S01 2160p 4K UHD BluRay Remux-GROUP"), "|Show Title|  S1  2160p")
+eq("display batch with season", row("[G] Show Name Season 1 - 01 ~ 12 [1080p]"), "[G] |Show Name|  S01E01-E12  1080p")
+eq("display no group, 4K", row("Show Title S01 2160p 4K UHD BluRay Remux-GROUP"), "|Show Title|  S01  2160p")
 eq("display bare", row("[G] Movie Name"), "[G] |Movie Name|")
 eq("display episode 100+", row("[G] One Piece - 1120 (1080p)"), "[G] |One Piece|  E1120  1080p")
+local resolved = T.parse_title("[SubsPlease] Mushoku Tensei S2 - 13v2 (1080p) [A1B2].mkv")
+resolved.sxe = "S02E13"
+eq("display resolved tag replaces the fallback", table.concat({T.display(resolved)}, "|"),
+   "[SubsPlease] |Mushoku Tensei|  S02E13v2  1080p")
 
 -- Part / Cour: the second half of a split season
 t = T.parse_title("[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 01 [1080p][Multiple Subtitle].mkv")
@@ -110,7 +115,7 @@ eq("no part", T.parse_title("[SubsPlease] Sousou no Frieren - 28 (1080p)").part,
 eq("display Part", row("[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 01 [1080p].mkv"),
    "[Erai-raws] |Mushoku Tensei II - Isekai Ittara Honki Dasu|  P2 E01  1080p")
 eq("display S2 Cour 2", row("[SubsPlease] Kusuriya no Hitorigoto S2 Cour 2 - 13 (1080p) [ABCD].mkv"),
-   "[SubsPlease] |Kusuriya no Hitorigoto|  S2 P2 E13  1080p")
+   "[SubsPlease] |Kusuriya no Hitorigoto|  S02 P2 E13  1080p")
 
 -- AniList search finds nothing for "Mushoku Tensei S2" or "Frieren Season 1"
 eq("cover query S2", T.cover_query("Mushoku Tensei S2"), "Mushoku Tensei Season 2")
