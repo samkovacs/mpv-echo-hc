@@ -95,6 +95,13 @@ eq("display no group, 4K", row("Show Title S01 2160p 4K UHD BluRay Remux-GROUP")
 eq("display bare", row("[G] Movie Name"), "[G] |Movie Name|")
 eq("display episode 100+", row("[G] One Piece - 1120 (1080p)"), "[G] |One Piece|  E1120  1080p")
 
+-- AniList search finds nothing for "Mushoku Tensei S2" or "Frieren Season 1"
+eq("cover query S2", T.cover_query("Mushoku Tensei S2"), "Mushoku Tensei Season 2")
+eq("cover query S02", T.cover_query("Kaiju No. 8 S02"), "Kaiju No. 8 Season 2")
+eq("cover query S1 dropped", T.cover_query("Show Title S01"), "Show Title")
+eq("cover query nth Season kept", T.cover_query("Dandadan 2nd Season"), "Dandadan 2nd Season")
+eq("cover query no season", T.cover_query("Sousou no Frieren"), "Sousou no Frieren")
+
 eq("unparsed title", T.parse_title("[Group][1080p][HEVC]"), nil)
 eq("unparsed extension only", T.parse_title("(1080p) [ABCD].mkv"), nil)
 

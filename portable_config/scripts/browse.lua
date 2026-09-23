@@ -386,7 +386,9 @@ end
 local function ensure_cover(show)
     if covers[show] ~= nil then return end
     covers[show] = "pending"
-    local file = string.format("%s\\cover_%s.txt", THUMB_DIR, djb2(show))
+    -- keyed by the query, not the show: "Show S2" once cached as "no cover"
+    local query = torrents.cover_query(show)
+    local file = string.format("%s\\cover_%s.txt", THUMB_DIR, djb2(query))
     local f = io.open(file, "r")
     if f then
         local url = f:read("*l")
@@ -398,7 +400,7 @@ local function ensure_cover(show)
         args = {"curl", "-s", "-S", "--max-time", "10", "https://graphql.anilist.co",
                 "-H", "Content-Type: application/json", "--data-binary", utils.format_json({
                     query = "query($s:String){Page(perPage:1){media(search:$s,type:ANIME){coverImage{large}}}}",
-                    variables = {s = show}})},
+                    variables = {s = query}})},
     }, function(ok, res)
         local data = ok and res.status == 0 and utils.parse_json(res.stdout)
         if not (data and data.data) then

@@ -94,6 +94,15 @@ function M.display(e)
     return e.group and "[" .. e.group .. "] " or "", show, #tags > 0 and "  " .. table.concat(tags, "  ") or ""
 end
 
+-- Show name -> AniList search string. AniList finds nothing for "Show S2"
+-- (nor "Show Season 1": first seasons carry no number), but does for
+-- "Show Season 2".
+function M.cover_query(show)
+    local name, n = show:match("^(.-)%s+S0*(%d+)$")
+    if not name then return show end
+    return n == "1" and name or name .. " Season " .. n
+end
+
 -- ------------------------------------------------------------------ feeds
 
 local MONTHS = {Jan = 1, Feb = 2, Mar = 3, Apr = 4, May = 5, Jun = 6,
