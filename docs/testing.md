@@ -38,6 +38,13 @@ Validate the HDR clip before trusting any result from it. A broken clip fakes fr
 grep -c -E "^\[[0-9. ]+\]\[(e|w)\]\[ffmpeg" validate.log   # expect 0
 ```
 
+**480i60 TFF and a progressive match** (autodeint). The progressive one must not be `testsrc2`: its fine moving lines read as interlaced to idet even in plain ffmpeg (48 TFF, 30 BFF, 12 progressive in 3 s).
+
+```sh
+./ffmpeg.exe -y -f lavfi -i "testsrc2=s=720x480:r=60000/1001" -t 30 \n  -vf "tinterlace=mode=interleave_top,setfield=tff" -c:v libx264 -flags +ilme+ildct \n  -x264-params tff=1 -pix_fmt yuv420p int480i.mkv
+./ffmpeg.exe -y -f lavfi -i "gradients=s=720x480:r=30000/1001:speed=0.02" -t 30 \n  -c:v libx264 -pix_fmt yuv420p prog480.mkv
+```
+
 **Pretty demo clip for screenshots** (muted gradient, no test pattern):
 
 ```sh
@@ -102,6 +109,12 @@ grep -i -E "vsr_autocrop|d3d11vpp|video-crop" vsr.log | head -40
 ```
 
 With a shader profile active the script must log that VSR is skipped (ADR-0002). Crop detection retries at 4 / 20 / 65 / 185 s, so a 2.39:1 test needs a clip with real black bars (`pad=` in ffmpeg) and at least 25 s of playback.
+
+autodeint (Ctrl+d) must put its filters before `@vsr`, undo them on the next file and survive a file change mid-detection. Needs a window larger than the clip so `@vsr` is in the chain:
+
+```sh
+./mpv.exe --window-scale=2 --volume=0 --no-resume-playback --save-position-on-quit=no \n  --script-opts-append=autoload-disabled=yes --script-opts-append=autodeint.detect_seconds=2 \n  --script=docs/tests/autodeint_test.lua int480i.mkv prog480.mkv 2>&1 | grep -E "FAIL|ALL PASS"
+```
 
 ## HDR target
 

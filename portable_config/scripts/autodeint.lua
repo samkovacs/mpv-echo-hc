@@ -55,8 +55,21 @@ local function del_filter_if_present(label)
     return false
 end
 
+-- Echostorm: "vf pre", not "vf add". Appending put idet/setfield/pullup after
+-- vsr_autocrop.lua's @vsr, i.e. on upscaled d3d11 frames, where idet never
+-- produced metadata and judge() threw. A label already in the chain is
+-- replaced in place, so callers prepend in reverse chain order.
 local function add_vf(label, filter)
-    return mp.command(('vf add @%s:%s'):format(label, filter))
+    return mp.command(('vf pre @%s:%s'):format(label, filter))
+end
+
+-- deinterlace as it was before this script first changed it this file, so
+-- nothing carries into the next file (mpv.conf also keeps it out of
+-- watch_later).
+local saved_deinterlace
+local function set_deinterlace(v)
+    saved_deinterlace = saved_deinterlace or mp.get_property("deinterlace")
+    mp.set_property("deinterlace", v)
 end
 
 local function stop_detect()
@@ -68,6 +81,9 @@ end
 local function judge(label)
     -- get the metadata
     local result = mp.get_property_native(string.format("vf-metadata/%s", label))
+    if not result or not result["lavfi.idet.multiple.tff"] then
+        return nil -- no frames reached idet (no video, or the file changed)
+    end
     local num_tff          = tonumber(result["lavfi.idet.multiple.tff"])
     local num_bff          = tonumber(result["lavfi.idet.multiple.bff"])
     local num_progressive  = tonumber(result["lavfi.idet.multiple.progressive"])
@@ -99,6 +115,13 @@ local function select_filter()
     local verdict = judge(detect_label)
     local ivtc_verdict = judge(ivtc_detect_label)
     local dominance = "auto"
+    if verdict == nil or ivtc_verdict == nil then
+        mp.msg.warn("no frames analysed: doing nothing")
+        stop_detect()
+        del_filter_if_present(dominance_label)
+        del_filter_if_present(pullup_label)
+        return
+    end
     if verdict == progressive then
         mp.msg.info("progressive: doing nothing")
         stop_detect()
@@ -125,7 +148,7 @@ local function select_filter()
         mp.msg.info("interlaced with " .. dominance ..
                     " field dominance: setting deinterlace property")
         del_filter_if_present(pullup_label)
-        mp.set_property("deinterlace","yes")
+        set_deinterlace("yes")
         stop_detect()
     end
 end
@@ -137,15 +160,15 @@ local function start_detect()
         return
     end
 
-    mp.set_property("deinterlace","no")
+    set_deinterlace("no")
     del_filter_if_present(pullup_label)
     del_filter_if_present(dominance_label)
 
-    -- insert the detection filters
-    if not (add_vf(detect_label, 'idet') and
-            add_vf(dominance_label, 'setfield=mode=auto') and
+    -- insert the detection filters (prepended, so in reverse chain order)
+    if not (add_vf(ivtc_detect_label, 'idet') and
             add_vf(pullup_label, 'lavfi-pullup') and
-            add_vf(ivtc_detect_label, 'idet')) then
+            add_vf(dominance_label, 'setfield=mode=auto') and
+            add_vf(detect_label, 'idet')) then
         mp.msg.error("failed to insert detection filters")
         return
     end
@@ -153,5 +176,18 @@ local function start_detect()
     -- wait to gather data
     timer = mp.add_timeout(detect_seconds, select_filter)
 end
+
+-- Echostorm: per file. A detection still running is cancelled, and the
+-- filters and deinterlace setting chosen for this file are undone.
+mp.register_event("end-file", function()
+    if timer then timer:kill() end
+    stop_detect()
+    del_filter_if_present(dominance_label)
+    del_filter_if_present(pullup_label)
+    if saved_deinterlace then
+        mp.set_property("deinterlace", saved_deinterlace)
+        saved_deinterlace = nil
+    end
+end)
 
 mp.add_key_binding("ctrl+d", script_name, start_detect)
