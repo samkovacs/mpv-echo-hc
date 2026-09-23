@@ -441,8 +441,15 @@ local function ensure_lists()
         local info = utils.file_info(file)
         if info and not lists[name] then
             local f = io.open(file, "r")
-            lists[name] = utils.parse_json(f:read("*a") or "")
+            local t, err = utils.parse_json(f:read("*a") or "")
             f:close()
+            if t then
+                lists[name] = t
+            else
+                -- truncated write or hand edit: refetch now, not in a week
+                mp.msg.warn(string.format("anime list %s: cached file unreadable (%s), refetching", name, err))
+                info = nil
+            end
         end
         if (not info or os.time() - info.mtime > LISTS_MAX_AGE) and not l.pending then
             l.pending = true
