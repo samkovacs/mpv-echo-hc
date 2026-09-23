@@ -28,8 +28,11 @@ local function invoke_dialog(ps_command)
     local was_ontop = mp.get_property_native("ontop")
     if was_ontop then mp.set_property_native("ontop", false) end
 
+    -- Piped stdout defaults to the OEM codepage: non-ASCII paths came back
+    -- as "???.mkv". BOM-less UTF-8 is what mpv expects.
     local res = utils.subprocess({
-        args = { "powershell", "-NoProfile", "-STA", "-Command", ps_command },
+        args = { "powershell", "-NoProfile", "-STA", "-Command",
+                 "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false;" .. ps_command },
         cancellable = false,
         capture_stdout = true,
         capture_stderr = true,
