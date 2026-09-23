@@ -1,49 +1,66 @@
-<svg width="1200" height="220" viewBox="0 0 1200 220" xmlns="http://www.w3.org/2000/svg">
+<svg width="1200" height="230" viewBox="0 0 1200 230" xmlns="http://www.w3.org/2000/svg">
+  <!-- Solarized dark: base03 #002B36, base02 #073642, base01 #586E75, base1 #93A1A1,
+       blue #268BD2, cyan #2AA198, green #859900. The gradient is ModernZ's seekbar_shimmer. -->
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#14161c"/>
-      <stop offset="100%" stop-color="#090a0d"/>
+      <stop offset="0%" stop-color="#073642"/>
+      <stop offset="100%" stop-color="#002B36"/>
     </linearGradient>
-    <radialGradient id="glow" cx="14%" cy="50%" r="55%">
-      <stop offset="0%" stop-color="#ff8232" stop-opacity="0.22"/>
-      <stop offset="100%" stop-color="#ff8232" stop-opacity="0"/>
+    <radialGradient id="glow" cx="9%" cy="48%" r="50%">
+      <stop offset="0%" stop-color="#268BD2" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#268BD2" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="playGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ff9a52"/>
-      <stop offset="100%" stop-color="#ff8232"/>
+    <linearGradient id="shimmer" x1="0" y1="0" x2="1200" y2="0" gradientUnits="userSpaceOnUse" spreadMethod="reflect">
+      <stop offset="0%" stop-color="#268BD2"/>
+      <stop offset="50%" stop-color="#2AA198"/>
+      <stop offset="100%" stop-color="#859900"/>
+      <animateTransform attributeName="gradientTransform" type="translate" from="0 0" to="2400 0" dur="8s" repeatCount="indefinite"/>
+    </linearGradient>
+    <linearGradient id="play" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#268BD2"/>
+      <stop offset="60%" stop-color="#2AA198"/>
+      <stop offset="100%" stop-color="#859900"/>
     </linearGradient>
   </defs>
 
-  <rect width="1200" height="220" fill="url(#bg)"/>
-  <rect width="1200" height="220" fill="url(#glow)"/>
-  <rect x="0" y="0" width="6" height="220" fill="#ff8232"/>
+  <rect width="1200" height="230" fill="url(#bg)"/>
+  <rect width="1200" height="230" fill="url(#glow)"/>
 
-  <circle cx="105" cy="110" r="52" fill="url(#playGrad)"/>
-  <path d="M92 84 L136 110 L92 136 Z" fill="#14161c"/>
+  <circle cx="105" cy="110" r="52" fill="url(#play)"/>
+  <path d="M92 84 L136 110 L92 136 Z" fill="#002B36"/>
 
-  <text x="185" y="97" font-family="Segoe UI, -apple-system, Arial, sans-serif" font-size="40" font-weight="700" fill="#f5f5f4">mpv echo-HC edition</text>
-  <text x="187" y="130" font-family="Segoe UI, -apple-system, Arial, sans-serif" font-size="18" fill="#a8a8a8">Portable Windows mpv with NVIDIA RTX Video Super Resolution and a built-in YouTube / Twitch browser</text>
+  <text x="185" y="97" font-family="Segoe UI, -apple-system, Arial, sans-serif" font-size="40" font-weight="700" fill="#EEE8D5">mpv echo-HC edition</text>
+  <text x="187" y="130" font-family="Segoe UI, -apple-system, Arial, sans-serif" font-size="18" fill="#93A1A1">Portable Windows mpv with NVIDIA RTX Video Super Resolution and a built-in YouTube / Twitch / anime browser</text>
 
   <g font-family="Segoe UI, -apple-system, Arial, sans-serif" font-size="14" font-weight="600">
     <g transform="translate(187, 152)">
-      <rect width="88" height="28" rx="14" fill="#1f2128" stroke="#ff8232" stroke-width="1"/>
-      <text x="44" y="19" text-anchor="middle" fill="#ff8232">RTX VSR</text>
+      <rect width="88" height="28" rx="14" fill="#073642" stroke="#268BD2"/>
+      <text x="44" y="19" text-anchor="middle" fill="#268BD2">RTX VSR</text>
     </g>
     <g transform="translate(287, 152)">
-      <rect width="72" height="28" rx="14" fill="#1f2128" stroke="#ff8232" stroke-width="1"/>
-      <text x="36" y="19" text-anchor="middle" fill="#ff8232">HDR</text>
+      <rect width="72" height="28" rx="14" fill="#073642" stroke="#2AA198"/>
+      <text x="36" y="19" text-anchor="middle" fill="#2AA198">HDR</text>
     </g>
     <g transform="translate(371, 152)">
-      <rect width="98" height="28" rx="14" fill="#1f2128" stroke="#ff8232" stroke-width="1"/>
-      <text x="49" y="19" text-anchor="middle" fill="#ff8232">Portable</text>
+      <rect width="98" height="28" rx="14" fill="#073642" stroke="#859900"/>
+      <text x="49" y="19" text-anchor="middle" fill="#859900">Portable</text>
     </g>
     <g transform="translate(481, 152)">
-      <rect width="130" height="28" rx="14" fill="#1f2128" stroke="#ff8232" stroke-width="1"/>
-      <text x="65" y="19" text-anchor="middle" fill="#ff8232">No Admin Required</text>
+      <rect width="146" height="28" rx="14" fill="#073642" stroke="#B58900"/>
+      <text x="73" y="19" text-anchor="middle" fill="#B58900">No Admin Required</text>
     </g>
-    <g transform="translate(623, 152)">
-      <rect width="146" height="28" rx="14" fill="#1f2128" stroke="#ff8232" stroke-width="1"/>
-      <text x="73" y="19" text-anchor="middle" fill="#ff8232">YouTube + Twitch</text>
+    <g transform="translate(639, 152)">
+      <rect width="146" height="28" rx="14" fill="#073642" stroke="#6C71C4"/>
+      <text x="73" y="19" text-anchor="middle" fill="#6C71C4">YouTube + Twitch</text>
+    </g>
+    <g transform="translate(797, 152)">
+      <rect width="148" height="28" rx="14" fill="#073642" stroke="#D33682"/>
+      <text x="74" y="19" text-anchor="middle" fill="#D33682">Solarized Dark UI</text>
     </g>
   </g>
+
+  <!-- seekbar: remaining in base01, progress in the shimmer gradient -->
+  <rect x="0" y="212" width="1200" height="6" fill="#586E75"/>
+  <rect x="0" y="212" width="780" height="6" fill="url(#shimmer)"/>
+  <circle cx="780" cy="215" r="7" fill="#073642" stroke="#268BD2" stroke-width="2"/>
 </svg>

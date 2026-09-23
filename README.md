@@ -1,20 +1,39 @@
-<p align="center"><img src="doc/header.svg" width="100%" alt="mpv echo-HC edition — Portable Windows mpv build tuned for NVIDIA RTX Video Super Resolution"></p>
+<p align="center"><img src="doc/header.svg" width="100%" alt="mpv echo-HC edition: portable Windows mpv tuned for NVIDIA RTX Video Super Resolution, with a built-in YouTube, Twitch and anime browser"></p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-268BD2?style=flat-square&labelColor=073642"></a>
+  <img alt="Platform: Windows 10/11" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-2AA198?style=flat-square&labelColor=073642">
+  <img alt="mpv 0.40+" src="https://img.shields.io/badge/mpv-0.40%2B-859900?style=flat-square&labelColor=073642">
+  <img alt="GPU: NVIDIA RTX" src="https://img.shields.io/badge/GPU-NVIDIA%20RTX-B58900?style=flat-square&labelColor=073642">
+  <a href="CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-v0.04-6C71C4?style=flat-square&labelColor=073642"></a>
+</p>
 
 # mpv echo-HC edition
 
-A fork of [Echo-Storm's MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia-VSR) config with a built-in browser for YouTube, Twitch and anime, retuned for a 240 Hz HDR display.
+A fork of [Echo-Storm's MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia-VSR) config: portable mpv for Windows that upscales with **NVIDIA RTX Video Super Resolution**, passes **HDR** through per display, and browses **YouTube, Twitch and an anime torrent index** from inside the player. Retuned for a 240 Hz HDR display and themed **Solarized Dark** end to end.
 
-## 🧠 Overview
+> [!NOTE]
+> RTX VSR needs an NVIDIA RTX GPU with *Video Super Resolution* turned on in the NVIDIA app. Everything else (browser, shaders, HDR, OSC) works on any GPU that runs `gpu-api=d3d11`.
 
-This setup is built for users who have Nvidia RTX Video Super Resolution (VSR) enabled in the Nvidia app. It includes:
+<details>
+<summary><b>Table of contents</b></summary>
 
-- A streamlined `mpv.conf` for modern GPUs (`vo=gpu-next`, `gpu-api=d3d11`, `hwdec=d3d11va-copy`)
-- **Browse inside mpv:** YouTube search plus your Subscriptions, Home, History and Watch Later feeds, Twitch search plus a live-channel list, and a torrent index of your choosing (search, new releases, followed shows) streamed in memory. List or thumbnail-grid view, type to fuzzy-filter, mouse or keyboard (`browse.lua`)
-- A custom Lua script that triggers VSR after 3 seconds of playback, auto-crops black bars, and upscales to native resolution — the two are integrated in one script so crop coordinates and VSR's scale factor never disagree (`vsr_autocrop.lua`)
-- GLSL shader profiles (ArtCNN, NNEDI3, RAVU, FSRCNNX, Anime4K) that take over from VSR where they apply; anime WEB-DL releases get ArtCNN automatically
-- HDR passthrough per display, SDR→HDR via libplacebo inverse tone mapping
-- ModernZ as the single OSC, mpv's native right-click menu, built-in `select.lua` for playlist, track and chapter pickers
-- Fully portable structure with optional system integration; no admin required
+- [Screenshots](#-screenshots)
+- [Highlights](#-highlights)
+- [Installation](#%EF%B8%8F-installation)
+- [Updating and uninstalling](#-updating-and-uninstalling)
+- [Key bindings](#%EF%B8%8F-key-bindings)
+- [Features in detail](#-features-in-detail)
+- [Configuration Manager](#%EF%B8%8F-configuration-manager)
+- [Folder structure](#-folder-structure)
+- [Privacy](#-privacy)
+- [Troubleshooting](#-troubleshooting)
+- [Documentation](#-documentation)
+- [Credits](#-credits)
+- [Changelog](#-changelog)
+- [License](#-license)
+
+</details>
 
 ---
 
@@ -23,55 +42,90 @@ This setup is built for users who have Nvidia RTX Video Super Resolution (VSR) e
 <table>
 <tr>
 <td width="50%">
-<img src="doc/mpv_player_osc.jpg" width="100%">
-<p align="center"><sub><b>Player</b> — ModernZ OSC</sub></p>
+<img src="doc/mpv_player_osc.jpg" width="100%" alt="ModernZ OSC in Solarized Dark with a seekbar thumbnail preview">
+<p align="center"><sub><b>Player</b>: ModernZ OSC, Solarized gradient seekbar, thumbfast preview</sub></p>
 </td>
 <td width="50%">
-<img src="doc/mpv_rightclick_menu.jpg" width="100%">
-<p align="center"><sub><b>Right-click menu</b> — mpv's native <code>menu.conf</code> menu</sub></p>
+<img src="doc/mpv_rightclick_menu.jpg" width="100%" alt="Native right-click menu with the Open submenu expanded">
+<p align="center"><sub><b>Right-click menu</b>: native <code>menu.conf</code>, Open &gt; YouTube / Twitch / Torrents</sub></p>
 </td>
 </tr>
 <tr>
 <td width="50%">
-<img src="doc/mpv_browse_list.jpg" width="100%">
-<p align="center"><sub><b>Browse</b> — YouTube search, list view (<code>Ctrl+y</code>)</sub></p>
+<img src="doc/mpv_browse_list.jpg" width="100%" alt="browse.lua list view of YouTube search results">
+<p align="center"><sub><b>Browse</b>: YouTube search, list view (<kbd>Ctrl</kbd>+<kbd>y</kbd>)</sub></p>
 </td>
 <td width="50%">
-<img src="doc/mpv_browse_grid.jpg" width="100%">
-<p align="center"><sub><b>Browse</b> — same results, thumbnail grid (<code>Tab</code>)</sub></p>
+<img src="doc/mpv_browse_grid.jpg" width="100%" alt="browse.lua thumbnail grid of the same results">
+<p align="center"><sub><b>Browse</b>: same results, thumbnail grid (<kbd>Tab</kbd>)</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<img src="doc/mpv_whichkey.jpg" width="100%" alt="which-key panel listing the bindings under the b prefix">
+<p align="center"><sub><b>Which-key</b>: press <kbd>b</kbd> (browse) or <kbd>g</kbd> (lists) to see what follows</sub></p>
+</td>
+<td width="50%">
+<img src="doc/mpv_stats.jpg" width="100%" alt="mpv stats overlay showing the d3d11vpp VSR filter at 1.33x">
+<p align="center"><sub><b>Stats</b> (<kbd>i</kbd>): <code>@vsr: d3d11vpp scale=1.3333 scaling-mode=nvidia</code> on a 1080p clip</sub></p>
 </td>
 </tr>
 </table>
 
 ---
 
-## ⚙️ Installation & Usage
+## ✨ Highlights
 
-### ✅ To install:
+| | |
+|---|---|
+| 🔍 **RTX VSR, crop-aware** | `vsr_autocrop.lua` detects black bars, crops, then scales the *cropped* picture to the display's native resolution with RTX VSR. One script, so crop and scale factor never disagree. |
+| 🌈 **HDR per display** | `hdr-mode.lua` + `mpv-display-plugin` pass HDR through on HDR monitors and inverse tone map SDR to the display's measured peak. |
+| 📺 **Browse inside mpv** | YouTube search and account feeds, Twitch search and live list, and an anime torrent index of your choosing, streamed in memory. List or thumbnail grid, fuzzy filter, mouse and keyboard. |
+| 🧠 **Shaders where they win** | ArtCNN, NNEDI3, RAVU, FSRCNNX, Anime4K profiles. Anime WEB-DL releases get ArtCNN automatically; VSR steps aside when a shader is active. |
+| 🎨 **One theme** | Solarized Dark across ModernZ, OSD, console and select menus, stats graphs, the pause indicator, the browser and the which-key panel. |
+| 📦 **Portable** | Everything lives in one folder. No admin needed except for the optional *Open With* registration. |
 
-1. **Run `1_Full_Latest_MPV_Installer.ps1`**
-   - Installs the latest versions of MPV, FFmpeg, yt-dlp, and guessit (used by `autochapters`)
-   - Fully portable, no admin required
+---
 
-2. **Run `2_Add_Supported_Filetypes_To_Open_With.ps1`** *(optional)*
-   - Adds MPV to system PATH
-   - Registers MPV for "Open With" with common media formats
-   - Requires admin, will auto-detect and prompt
+## ⚙️ Installation
 
-3. **Add login cookies** *(optional, needed for Twitch 1440p and the YouTube account feeds)*
+> [!IMPORTANT]
+> The scripts need Windows 10/11 and PowerShell 3+; they are written for **PowerShell 7** (`pwsh`).
 
-   `mpv.conf` points yt-dlp at `yt-dlp-cookies.txt` in the install root (next to `mpv.exe`). The file is gitignored and never leaves your machine. Without it everything still works: Twitch tops out at 1080p60 and the YouTube Subscriptions/Home/History/Watch Later entries return nothing.
+1. **Download mpv, FFmpeg, yt-dlp and guessit**
 
-   1. Install a Netscape-format cookie exporter in your browser, e.g. [Get cookies.txt LOCALLY](https://github.com/kairi003/Get-cookies.txt-LOCALLY).
-   2. **Twitch:** in a normal window, logged in, open twitch.tv and export the cookies for that site. The `auth-token` cookie does not rotate; re-export only after you log out of Twitch in the browser.
-   3. **YouTube:** open a **private window**, log in, go to `https://www.youtube.com/robots.txt`, export the cookies for youtube.com, then **close the private window**. YouTube rotates account cookies on open tabs; cookies taken from your normal browser session stop working within minutes and yt-dlp reports "The provided YouTube account cookies are no longer valid".
-   4. Paste both exports into one file, `yt-dlp-cookies.txt`, in the install root. yt-dlp rewrites it after every run, that is expected.
+   ```powershell
+   .\1_Full_Latest_MPV_Installer.ps1
+   ```
 
-   Do **not** use `cookies-from-browser`. yt-dlp writes the merged jar back to the file, which dumps every cookie your browser holds into plain text.
+   Pulls the latest builds into the repo folder. Portable, no admin.
+
+2. **Register *Open With* and `PATH`** *(optional)*
+
+   ```powershell
+   .\2_Add_Supported_Filetypes_To_Open_With.ps1
+   ```
+
+   Adds mpv to `PATH` and to *Open With* for common media types. Needs admin; the script detects this and prompts.
+
+3. **Add login cookies** *(optional: Twitch 1440p and the YouTube account feeds)*
+
+   `mpv.conf` points yt-dlp at `yt-dlp-cookies.txt` in the install root, next to `mpv.exe`. The file is gitignored. Without it everything still works: Twitch tops out at 1080p60 and the YouTube Subscriptions / Home / History / Watch later feeds come back empty.
+
+   1. Install a Netscape-format cookie exporter, for example [Get cookies.txt LOCALLY](https://github.com/kairi003/Get-cookies.txt-LOCALLY).
+   2. **Twitch:** logged in, in a normal window, open twitch.tv and export that site's cookies. The `auth-token` cookie does not rotate; re-export only after logging out of Twitch.
+   3. **YouTube:** open a **private window**, log in, go to `https://www.youtube.com/robots.txt`, export the youtube.com cookies, then **close the private window**.
+   4. Paste both exports into one `yt-dlp-cookies.txt` in the install root. yt-dlp rewrites the file after every run; that is expected.
+
+> [!WARNING]
+> YouTube rotates account cookies on open tabs. Cookies copied from your everyday browser session stop working within minutes ("The provided YouTube account cookies are no longer valid"). Use the private-window export above.
+
+> [!CAUTION]
+> Do **not** use `cookies-from-browser`. yt-dlp writes the merged jar back to the cookies file, which dumps every cookie your browser holds into plain text. See [ADR 0007](docs/adr/0007-single-cookies-file-not-cookies-from-browser.md).
 
 4. **Point the Torrents source at an index** *(optional, for anime)*
 
-   The repo ships no torrent site. Paste your index's two RSS URLs into `portable_config/script-opts/browse.conf`; until both are set, `Open > Torrents` is hidden and its bindings say what to configure. Most indexes offer an RSS version of their search page; `{query}` is replaced with the URL-encoded search text:
+   The repo ships no torrent site. Paste your index's two RSS URLs into `portable_config/script-opts/browse.conf`. Until both are set, *Open > Torrents* is hidden and its bindings say what to configure. `{query}` is replaced with the URL-encoded search text:
 
    ```ini
    torrent_search_url=https://index.example/?page=rss&q={query}&c=1_2
@@ -79,163 +133,336 @@ This setup is built for users who have Nvidia RTX Video Super Resolution (VSR) e
    torrent_shows=Sousou no Frieren|SubsPlease,Dandadan
    ```
 
-   `torrent_shows` is the follow list (comma-separated search strings, an optional `|Group` suffix keeps only that release group's uploads). Playback needs Node.js on `PATH` (`node --version`); the first release will trigger a Windows Firewall prompt for `node.exe`. Nothing is written to disk: `script-opts/webtorrent.conf` runs the client in memory mode.
+   `torrent_shows` is the follow list: comma-separated search strings, an optional `|Group` suffix keeps only that release group's uploads.
 
-### 🛠️ To change settings without hand-editing config files:
+   Playback needs [Node.js](https://nodejs.org/) on `PATH` (`node --version`). The first release triggers a Windows Firewall prompt for `node.exe`. Nothing is written to disk: `script-opts/webtorrent.conf` runs the client in memory mode.
 
-- **Run `3_Configuration_Manager.ps1`**
-  - A small checkbox/dropdown/text panel for the settings you're most likely to actually flip — audio/subtitle language priority, interpolation, debanding, auto-crop, RTX Video HDR, HDR display mode, video sync, surround audio preference, the two opt-in audio fixes, chapter auto-skip, stream thumbnails, stream cache size, max stream quality, and the stream auto-reload triggers
-  - Reads and rewrites only the specific lines it changes — every comment and every other setting in `mpv.conf`/`script-opts/*.conf` is left exactly where it was
-  - No admin required. Changes take effect the next time mpv starts (this edits the files mpv reads at launch, it doesn't talk to a running mpv instance)
-  - Renders in light mode regardless of system theme — it's a plain WPF window, which (unlike the native file-open dialog) doesn't auto-theme on Windows 11
-
-  - Slightly out of date example:
-  ![Configuration Manager](doc/configuration_manager.png)
-
-### 🔄 To uninstall:
-
-- **Run `X1_Remove_Supported_File_types_From_Open_With.ps1`**
-  - Removes PATH entry, Open With registration, and filetype associations
-
-### 🔁 To update:
-
-- Simply run `1_Full_Latest_MPV_Installer.ps1`
-- Updates MPV, FFmpeg, yt-dlp, and guessit
-- No need to re-run registration scripts unless you've uninstalled
+> [!TIP]
+> Keep your own values out of commits with `git update-index --skip-worktree portable_config/script-opts/browse.conf`.
 
 ---
 
-## 📁 Folder Structure
+## 🔁 Updating and uninstalling
 
+| Task | Run | Notes |
+|---|---|---|
+| Update mpv, FFmpeg, yt-dlp, guessit | `1_Full_Latest_MPV_Installer.ps1` | Re-run any time. Registration survives. |
+| Remove *Open With* and `PATH` | `X1_Remove_Supported_File_types_From_Open_With.ps1` | Reverses script 2. Delete the folder to finish. |
+
+---
+
+## ⌨️ Key bindings
+
+Two prefix keys open a **which-key** panel that lists what follows, so you do not have to memorise the rest.
+
+| Key | Action |
+|---|---|
+| <kbd>b</kbd> | Browse panel: <kbd>y</kbd> YouTube search, <kbd>s</kbd> subscriptions, <kbd>h</kbd> home, <kbd>H</kbd> history, <kbd>w</kbd> watch later, <kbd>t</kbd> Twitch search, <kbd>l</kbd> Twitch live, <kbd>n</kbd> / <kbd>N</kbd> / <kbd>f</kbd> torrent search / new / followed, <kbd>r</kbd> reopen |
+| <kbd>g</kbd> | Lists panel (`select.lua`): <kbd>p</kbd> playlist, <kbd>a</kbd> audio, <kbd>s</kbd> subtitles, <kbd>c</kbd> chapters, <kbd>d</kbd> audio devices, <kbd>h</kbd> watch history, <kbd>b</kbd> all bindings, <kbd>g</kbd> reload subtitles |
+| <kbd>Ctrl</kbd>+<kbd>y</kbd> / <kbd>Ctrl</kbd>+<kbd>t</kbd> / <kbd>Ctrl</kbd>+<kbd>n</kbd> | Search YouTube / Twitch / the torrent index |
+| <kbd>Ctrl</kbd>+<kbd>b</kbd> | Reopen the last browse results without refetching |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>t</kbd> | Torrent transfer overlay (speed, peers, progress) |
+| <kbd>Ctrl</kbd>+<kbd>o</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>o</kbd> / <kbd>Ctrl</kbd>+<kbd>u</kbd> | Open file / folder / URL (native Windows dialogs) |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>s</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>a</kbd> | Add subtitle / audio track |
+| <kbd>c</kbd> | Toggle or undo the current crop + VSR state |
+| <kbd>C</kbd> | Cycle aspect ratio |
+| <kbd>d</kbd> / <kbd>D</kbd> | Toggle debanding / deinterlacing |
+| <kbd>Ctrl</kbd>+<kbd>d</kbd> | Detect interlacing and insert a deinterlacer (`autodeint.lua`) |
+| <kbd>Ctrl</kbd>+<kbd>r</kbd> | Reload a stalled stream at the current position |
+| <kbd>k</kbd> | Always on top |
+| <kbd>i</kbd> / <kbd>I</kbd> | Stats once / toggle |
+| Hold <kbd>→</kbd> | Fast-forward (`evafast.lua`); tap to seek |
+| Right-click | Full menu: Open, Playlist, Tracks, Playback, Chapters, Video, Audio, Subtitle, Window, View, Profiles, Tools |
+
+**Inside the browser:** type to fuzzy-filter, <kbd>↑</kbd> <kbd>↓</kbd> <kbd>PgUp</kbd> <kbd>PgDn</kbd> <kbd>Home</kbd> <kbd>End</kbd> or the wheel to move, hover to focus, <kbd>Enter</kbd> or click to play, <kbd>Shift</kbd>+<kbd>Enter</kbd> to queue, <kbd>Tab</kbd> for list / grid, <kbd>Esc</kbd> clears the filter, then closes.
+
+The complete list is in `portable_config/input.conf`, or press <kbd>g</kbd> <kbd>b</kbd> in the player.
+
+---
+
+## 🎯 Features in detail
+
+<details open>
+<summary><b>📺 Browser: YouTube, Twitch, torrents</b></summary>
+
+- **YouTube:** search plus your Subscriptions, Home, History and Watch later feeds (feeds need cookies, Installation step 3). Played videos are marked watched on your account when cookies are present.
+- **Twitch:** channel search and a live list, sorted by viewers, with uptime and compact viewer counts. Twitch does not give third-party clients the follow list, so *Live channels* checks the logins you put in `script-opts/browse.conf` under `twitch_channels=` ([ADR 0008](docs/adr/0008-twitch-follows-from-hand-maintained-list.md)).
+- **Torrents:** *Open > Torrents* (Search..., New releases, Followed shows) reads the RSS feeds you configured. Releases are grouped by show, newest episode first, then highest resolution, then most seeders. Rows show `[Group] Show  S2 E07  1080p`, with fansub episode numbers resolved to TVDB season/episode through [Fribb/anime-lists](https://github.com/Fribb/anime-lists) and [anime-relations](https://github.com/erengy/anime-relations). Seeders, size and a `trusted` marker are shown; releases under 3 seeders are dimmed and sink to the bottom of their show. The grid shows one AniList cover per show.
+- **Streaming:** <kbd>Enter</kbd> hands the release to `webtorrent.js`, which streams it in memory. A season batch loads as a playlist. Picking another release stops the first transfer.
+- **Views:** Solarized Dark list (18 rows) or a 4x3 thumbnail grid, <kbd>Tab</kbd> toggles. Results reopen without refetching (<kbd>Ctrl</kbd>+<kbd>b</kbd>), and each source remembers its last search text.
+
+</details>
+
+<details>
+<summary><b>🔍 Upscaling, cropping and shaders</b></summary>
+
+- **RTX VSR** starts about 4 seconds into playback (3 s hardware-decode settle, 1 s crop detection) and scales to native resolution. It only applies when the *cropped* picture is below display resolution and hardware decoded. Crop detection retries at 4 / 20 / 65 / 185 s without dropping frames.
+- **Auto-crop** runs in the same evaluation that picks VSR's scale factor, so the two cannot be separate scripts. <kbd>c</kbd> toggles manually; auto-crop mode itself is in the right-click *Video* menu.
+- **Shaders:** `profiles.conf` ships `ArtCNN`, `ArtCNN-DS`, `NNEDI3`, `NNEDI3+`, `Ravu-Zoom`, `FSRCNNX`, `FSRCNNX+`, `Anime4K` and two deband strengths, selectable with `--profile=` or right-click *Profiles*. SubsPlease, Erai-raws, HorribleSubs and HatSubs files get `ArtCNN_C4F16_DS` automatically.
+- **Shaders and VSR do not stack.** d3d11's video processor scales before any shader runs, so `vsr_autocrop.lua` skips VSR when a shader is set. Measurements in [`doc/research-rtx-vsr-vs-shaders.md`](doc/research-rtx-vsr-vs-shaders.md).
+- Only the ArtCNN **C4F16** builds work on `gpu-api=d3d11`. C4F32 and the `_CMP` compute builds exceed d3d11's constant-buffer and shared-memory limits and are silently disabled ([ADR 0003](docs/adr/0003-artcnn-c4f16-only-on-d3d11.md)).
+
+</details>
+
+<details>
+<summary><b>🌈 HDR</b></summary>
+
+- [mpv-display-plugin](https://github.com/dyphire/mpv-display-plugin) (`scripts/display-info.dll`) tells `hdr-mode.lua` what each display can do.
+- Default `hdr_mode=pass`: HDR is passed through when Windows HDR is already on. No OS-level switching, no flicker. Cycle `noth` / `switch` / `pass` from the right-click *Window* menu.
+- In pass mode, SDR sources are inverse tone mapped by libplacebo to the display's measured peak (`inverse-tone-mapping=yes`).
+- **NVIDIA RTX Video HDR** is optional and off (`nvidia_true_hdr=no` in `vsr_autocrop.conf`). When enabled, it only applies if the display is confirmed to be in HDR mode, so it cannot misfire on SDR ([ADR 0006](docs/adr/0006-sdr-to-hdr-via-libplacebo-not-rtx-video-hdr.md)).
+
+</details>
+
+<details>
+<summary><b>🎨 Interface</b></summary>
+
+- **ModernZ v0.3.3** with the fluent icon theme is the only OSC ([why not uosc](doc/research-osc-modernz-vs-uosc.md)). A local patch adds `seekbar_shimmer`: the progress bar is an animated blue → cyan → green gradient (`modernz.conf`).
+- **Solarized Dark** everywhere: ModernZ, OSD messages, console and `select.lua` menus, stats graphs, the pause indicator, the browser and the which-key panel share one translucency level and a thin base01 edge.
+- **Which-key panel** (`whichkey.lua`): press a prefix key and see its bindings.
+- **Thumbnails** on the seekbar for local files and streams, YouTube and Twitch VODs included (thumbfast).
+- **Right-click menu:** mpv's native `menu.conf`, extended with Open File / Folder / URL / Subtitle / Audio, the browser sources, stream quality up / down, and runtime toggles for crop, auto-crop mode, chapter skip, interpolation and HDR mode.
+- **Fonts:** Netflix Sans (Light, Medium, Bold).
+
+</details>
+
+<details>
+<summary><b>🔊 Audio</b></summary>
+
+- **Surround preferred:** `prefer_surround_echostorm.lua` picks the track with the most channels, but only among tracks in the language `alang` already chose.
+- **Downmix profiles** keep 5.1(side) surrounds and only fire on stereo output.
+- **Loudness normalisation:** `dynaudnorm` is in `mpv.conf`, commented out. Single-pass, safe for live streams.
+
+</details>
+
+<details>
+<summary><b>📡 Streams and playback</b></summary>
+
+- **Stream quality:** `ytdlautoformat.lua` caps YouTube, Twitch and Kick at 2160p by default (`quality=` in `ytdlautoformat.conf`). Step up or down mid-stream from the right-click *Playback* menu; it reloads at the current position.
+- **Auto-reload** of stalled streams from their last position (`reload.lua`).
+- **Chapters:** OP / ED / preview chapters are skipped (`chapterskip.lua`, toggle in *Chapters*). Missing anime OP / ED chapters are looked up automatically (`autochapters`, needs `guessit.exe`, installed by script 1).
+- **Watch history:** mpv's built-in `save-watch-history`, browsable with <kbd>g</kbd> <kbd>h</kbd>.
+- **Clip export:** mark in / out and export a lossless stream-copy clip with the bundled `ffmpeg.exe` to `Desktop/mpv/clips/` (*Tools > Clip export*). Cuts snap to keyframes.
+- **Screenshots** go to `Desktop/mpv/screenshots/{title}/`, timestamped JPG.
+- **`video-sync=audio`**: every display-sync mode dropped frames on 4K HDR at 240 Hz in testing; audio sync dropped none ([ADR 0001](docs/adr/0001-video-sync-audio-not-display-resample.md)).
+
+</details>
+
+---
+
+## 🛠️ Configuration Manager
+
+```powershell
+.\3_Configuration_Manager.ps1
 ```
+
+A small WPF panel for the settings worth flipping without opening a config file: audio / subtitle language priority, interpolation, debanding, auto-crop, RTX Video HDR, HDR display mode, video sync, surround preference, the two opt-in audio fixes, chapter skip, stream thumbnails, stream cache size, max stream quality and the stream auto-reload triggers.
+
+<p align="center"><img src="doc/configuration_manager.png" width="420" alt="Configuration Manager window"></p>
+
+- Rewrites only the lines it changes. Comments and every other setting in `mpv.conf` and `script-opts/*.conf` stay where they were.
+- Changes apply the next time mpv starts; it edits files, it does not talk to a running player.
+- Always light mode: plain WPF does not follow the Windows 11 theme.
+
+---
+
+## 📁 Folder structure
+
+<details>
+<summary>Expand</summary>
+
+```text
 MPV/
 ├── 1_Full_Latest_MPV_Installer.ps1                     ← downloads mpv, ffmpeg, yt-dlp, guessit into this folder
 ├── 2_Add_Supported_Filetypes_To_Open_With.ps1          ← registration (PATH + Open With)
 ├── 3_Configuration_Manager.ps1                         ← checkbox/dropdown panel for common config toggles
 ├── X1_Remove_Supported_File_types_From_Open_With.ps1   ← uninstall (reverses script 2)
-├── yt-dlp-cookies.txt                                  ← your login cookies, gitignored (see Installation step 3)
-├── doc/
-│   ├── manual.pdf
-│   ├── mpbindings.png
-│   ├── research-rtx-vsr-vs-shaders.md                  ← why shaders and VSR cannot stack, measured
-│   └── research-osc-modernz-vs-uosc.md                 ← why ModernZ is the only OSC
+├── yt-dlp-cookies.txt                                  ← your login cookies, gitignored (Installation step 3)
+├── doc/                                                ← screenshots, banner, manual.pdf, research notes
 ├── docs/
 │   ├── adr/                                            ← decision records (why things are the way they are)
+│   ├── tests/                                          ← Lua and shell tests, run under mpv
 │   └── testing.md                                      ← how to verify changes: synthetic clips, probes, UI driving
-├── webtorrent/                                         ← bun project vendoring webtorrent-mpv-hook (+ patch for a second magnet per session)
+├── webtorrent/                                         ← bun project vendoring webtorrent-mpv-hook (+ patch)
 └── portable_config/
     ├── mpv.conf
     ├── profiles.conf        ← shader, HDR, downscaling and downmix profiles
-    ├── input.conf
-    ├── menu.conf            ← right-click context menu (mpv default + Open File/Folder/URL, YouTube, Twitch, Torrents)
+    ├── input.conf           ← key bindings, including the g and b which-key prefixes
+    ├── menu.conf            ← right-click context menu
     ├── fonts/               ← Netflix Sans + ModernZ icon fonts
     ├── scripts/
-    │   ├── browse.lua                    ← YouTube/Twitch/torrent-index search and feeds inside mpv (echo-HC)
-    │   ├── browse_torrents.lua           ← pure Lua feed/title parsing and ordering for the Torrents source (unit test in docs/tests)
-    │   ├── whichkey.lua                  ← which-key panel: press g or b to see and run the bindings under it (test in docs/tests)
-    │   ├── modernz.lua                   ← OSC UI
-    │   ├── vsr_autocrop.lua              ← RTX VSR upscaler + crop-aware auto-crop, one integrated script (Echostorm)
-    │   ├── screenshotfolder_echostorm.lua← organized screenshots (Echostorm)
+    │   ├── browse.lua                    ← YouTube / Twitch / torrent-index browser
+    │   ├── browse_torrents.lua           ← RSS parsing and release ordering for the Torrents source
+    │   ├── browse_anime.lua              ← fansub episode → TVDB S##E## resolution
+    │   ├── whichkey.lua                  ← prefix-key panel
+    │   ├── modernz.lua                   ← OSC (local patch: seekbar_shimmer)
+    │   ├── vsr_autocrop.lua              ← RTX VSR + crop-aware auto-crop (Echostorm)
     │   ├── thumbfast.lua                 ← seekbar thumbnails
-    │   ├── pause_indicator_lite.lua      ← pause overlay
-    │   ├── open_file_echostorm.lua       ← native Windows open file/folder/URL/subtitle/audio dialogs (Echostorm: added folder, URL)
-    │   ├── ytdlautoformat.lua            ← auto ytdl-format per domain (YouTube, Twitch, Kick)
-    │   ├── chapterskip.lua               ← auto-skip OP/ED/preview chapters
-    │   ├── reload.lua                    ← auto-reload stalled streams
     │   ├── hdr-mode.lua                  ← per-display HDR target, SDR→HDR inverse tone mapping
     │   ├── display-info.dll              ← mpv-display-plugin, HDR display info for hdr-mode.lua
-    │   ├── prefer_surround_echostorm.lua ← auto-selects the highest-channel-count audio track (Echostorm)
-    │   ├── clip_export_echostorm.lua     ← mark in/out points, export via ffmpeg stream copy (Echostorm)
-    │   ├── stream_quality_echostorm.lua  ← mid-stream quality up/down for YouTube/Twitch/Kick (Echostorm)
-    │   ├── autoload.lua                  ← queue the rest of the folder as a playlist
-    │   ├── autodeint.lua                 ← Ctrl+d: detect interlacing and insert a deinterlacer
-    │   ├── evafast.lua                   ← hold Right to fast-forward, tap to seek
-    │   ├── webtorrent.js                 ← webtorrent-mpv-hook: streams magnet links in memory (symlink into webtorrent/, needs node on PATH)
-    │   └── autochapters/main.lua         ← auto-detect anime OP/ED chapters (needs guessit.exe, see below)
-    ├── script-opts/                      ← one .conf per script above; browse.conf holds the Twitch channel list and the torrent index URLs, webtorrent.conf the memory-mode client
-    └── shaders/                          ← ArtCNN C4F16, NNEDI3, RAVU, FSRCNNX, Anime4K, SSIM (only d3d11-compatible builds)
+    │   ├── webtorrent.js                 ← webtorrent-mpv-hook, streams torrents in memory (needs node)
+    │   ├── autochapters/main.lua         ← anime OP/ED chapter lookup (needs guessit.exe)
+    │   ├── open_file_echostorm.lua       ← native Windows open file/folder/URL/subtitle/audio dialogs
+    │   ├── stream_quality_echostorm.lua  ← mid-stream quality up/down
+    │   ├── clip_export_echostorm.lua     ← in/out marks, ffmpeg stream-copy export
+    │   ├── prefer_surround_echostorm.lua ← highest-channel audio track within the chosen language
+    │   ├── screenshotfolder_echostorm.lua← organised screenshots
+    │   ├── ytdlautoformat.lua            ← ytdl-format per site
+    │   ├── chapterskip.lua, reload.lua, autoload.lua, autodeint.lua, evafast.lua, pause_indicator_lite.lua
+    ├── script-opts/                      ← one .conf per script
+    └── shaders/                          ← ArtCNN C4F16, NNEDI3, RAVU, FSRCNNX, Anime4K, SSIM (d3d11-compatible builds only)
 ```
 
----
-
-## 🎯 Features
-
-- **Browse YouTube and Twitch without leaving mpv:** `Ctrl+y` searches YouTube, `Ctrl+t` searches Twitch; the right-click `Open` menu adds YouTube Subscriptions / Home / History / Watch later and Twitch Live channels. Results open in a Solarized Dark list (18 rows) or a 4x3 thumbnail grid, `Tab` toggles. Type to fuzzy-filter, arrows / PgUp / PgDn / Home / End / mouse wheel to move, hover to focus, `Enter` or click to play, `Esc` clears the filter then closes. Feeds and the 1440p Twitch rendition need login cookies (Installation step 3). Twitch does not expose the follow list to third-party clients, so `Live channels` checks the logins you list in `script-opts/browse.conf` under `twitch_channels=`
-- **Anime from a torrent index, streamed like YouTube:** `Open > Torrents` (Search..., New releases, Followed shows) queries the RSS feeds you configured (Installation step 4) and lists releases grouped by show, newest episode first, then highest resolution, then most seeders; releases with fewer than 3 seeders sink to the bottom of their show and titles the parser cannot read land in a final unparsed group. Each row shows seeders, size and a `trusted` marker; the grid shows one cover per show from AniList, cached with the thumbnails. `Enter` hands the release to `webtorrent.js`, which streams it in memory (a season batch loads as a playlist starting at the first file), and picking another release stops the first transfer and starts the next. `Ctrl+Shift+t` toggles the transfer overlay (speed, peers, progress)
-- **Watch history:** mpv's built-in `save-watch-history` records everything played; YouTube videos are also marked watched on your account when cookies are present
-- **Configuration Manager:** `3_Configuration_Manager.ps1` — a standalone checkbox/dropdown/text panel (including audio/subtitle language priority) for the settings worth flipping without opening a config file by hand, editing only the specific lines it changes. See Installation & Usage above
-- **Base UI:** ModernZ v0.3.3 with fluent icon theme, the only OSC. See `doc/research-osc-modernz-vs-uosc.md` for why uosc was dropped
-- **Shaders:** `profiles.conf` ships `ArtCNN`, `ArtCNN-DS`, `NNEDI3`, `NNEDI3+`, `Ravu-Zoom`, `FSRCNNX`, `FSRCNNX+`, `Anime4K` and two deband strengths, selectable with `--profile=` or from the right-click `Profiles` menu. Anime WEB-DL releases (SubsPlease, Erai-raws, HorribleSubs, HatSubs filenames) get `ArtCNN_C4F16_DS` automatically. When a shader is active `vsr_autocrop.lua` skips VSR: they cannot stack, d3d11's video processor scales before any shader runs (`doc/research-rtx-vsr-vs-shaders.md`)
-- **Fonts:** Netflix Sans Medium (default), with Light and Bold variants
-- **Upscaling:** RTX VSR activates ~4 seconds after playback starts (3s hwdec settle + 1s crop detection), auto-upscales to native resolution — only applies when the *cropped* video content is below display resolution and hardware decoded (`vsr_autocrop.lua`)
-- **Interactive menus:** Built-in `select.lua` (mpv 0.40+) wired to playlist, audio track, subtitle, chapter, and audio device buttons
-- **Thumbnails:** thumbfast enabled including network/stream sources
-- **Screenshots:** Auto-organized into `Desktop/mpv/screenshots/{title}/`, timestamped, JPG
-- **Audio normalization:** `dynaudnorm` available via `af=` in `mpv.conf` (commented out by default — uncomment to enable)
-- **Network buffering:** Cache and readahead configured for HLS/live stream stability
-- **UI:** Borders enabled, windowed by default, taskbar progress enabled
-- **File dialogs:** `Ctrl+O` opens files, `Ctrl+Shift+O` opens a folder, `Ctrl+U` opens a URL, `Ctrl+Shift+S` adds a subtitle, `Ctrl+Shift+A` adds an audio track — all via native Windows dialogs, also reachable from the right-click menu
-- **Right-click menu:** mpv's full default context menu (`menu.conf`) — playback, tracks, video/audio/subtitle controls, window, tools, etc. — plus Open File/Folder/Subtitle/Audio at the top of the Open submenu, and runtime toggles for crop, auto-crop mode, chapter-skip, and HDR mode (see below)
-- **Stream quality:** `ytdl-format` auto-adjusts for YouTube, Twitch, and Kick (2160p cap by default, `quality=` in `ytdlautoformat.conf`), leaving other sites on `mpv.conf`'s default — lower the cap and RTX VSR upscales the rest. Bump it up/down mid-stream from the right-click Playback menu (`stream_quality_echostorm.lua`) — reloads at the current position with the new cap, since yt-dlp only reads `ytdl-format` at load time
-- **Auto-crop:** black bars auto-detected and cropped as part of the same evaluation that decides VSR's scale factor (`vsr_autocrop.lua`, see Changelog for why these can't be separate scripts). `c` toggles/undoes the current crop+VSR state manually (`C`, uppercase, is taken by the aspect-ratio cycle); auto-crop mode itself can be toggled from the right-click `&Video` menu
-- **Motion interpolation:** off by default (`interpolation=no`), toggle from the right-click `&Video` menu — smooths judder on lower-framerate content at the cost of some GPU overhead
-- **Chapter skip:** opening, ending, and next-episode preview chapters auto-skipped when present — toggle from the right-click `&Chapters` menu
-- **Auto chapters:** missing OP/ED chapters looked up automatically for anime files (requires `guessit.exe`, installed automatically by script 1 — or downloaded manually from [guessit-io/guessit releases](https://github.com/guessit-io/guessit/releases) and dropped in the install root; and `curl`, built into Windows 10/11) — manual search/database-update also in the right-click `&Chapters` menu
-- **Stream auto-reload:** a stalled/dead network stream automatically reloads from its last position (`Ctrl+R` to trigger manually, also in the right-click Playback menu)
-- **HDR:** [mpv-display-plugin](https://github.com/dyphire/mpv-display-plugin) (`scripts/display-info.dll`) provides display HDR capability info to `hdr-mode.lua`. Defaults to `hdr_mode=pass` (passes HDR through when the display is already in HDR mode; no automatic OS-level HDR switching, no flicker risk). Cycle `noth`/`switch`/`pass` from the right-click `&Window` menu. In pass mode SDR sources are inverse tone mapped by libplacebo to the display's measured peak (`inverse-tone-mapping=yes`), so SDR content uses the HDR headroom without the NVIDIA filter
-- **Debanding** on by default (`deband=yes`, one iteration), `d` toggles
-- **NVIDIA RTX Video HDR:** optional SDR→HDR enhancement, off by default (`nvidia_true_hdr=no` in `vsr_autocrop.conf`) — toggle from the right-click `&Window` menu. Only ever applies when the display is confirmed already in HDR mode (via the same `mpv-display-plugin` info `hdr-mode.lua` uses), so it can't misfire on an SDR display the way mpv's own filter can on its own (see Troubleshooting). Requires mpv 0.40+ and RTX Video HDR enabled in the NVIDIA app
-- **Surround audio preferred automatically:** on file load, auto-selects whichever audio track reports the highest channel count, but only among tracks matching whatever language `alang` already resolved to — never overrides a language preference just for more channels (`prefer_surround_echostorm.lua`) — mpv's own `--aid=auto` has no channel-count preference and can land on a lesser stereo/mono track when multiple tracks are ambiguously flagged "default" in the container
-- **Clip export:** mark an in/out point during playback and export that range via bundled `ffmpeg.exe` as a lossless stream-copy clip (`clip_export_echostorm.lua`), saved to `Desktop/mpv/clips/` — reachable from the right-click `Tools` → `Clip export` submenu. Cut points snap to the nearest keyframe (a stream-copy limitation, not a bug) — re-encode afterwards in a real editor if frame-accurate cuts are needed
+</details>
 
 ---
 
-## 📌 Notes
+## 🔒 Privacy
 
-- All scripts are silent, reversible, and require no user input except to exit
-- Designed for Windows 10/11 with PowerShell 3+ (written for 7)
-- No registry bloat, no filetype hijacking, no start menu shortcuts
-- Requires mpv 0.40+ for `select.lua` interactive menus (`load-select=yes`, mpv's actual default — `load-select-ui` was never a real option, see v1.0.3 changelog)
-- RTX VSR requires `gpu-api=d3d11` and an Nvidia RTX card with VSR enabled in the Nvidia app
-- Tuned on an RTX 3080 Ti driving a 3440x1440 240 Hz HDR display. `video-sync=audio` rather than `display-resample`: every display-sync mode dropped frames on 4K HDR at 240 Hz in testing, audio sync dropped none
+- `yt-dlp-cookies.txt`, watch history, watch-later state, the search-prompt cache and the installer's local markers are all **gitignored**. Nothing account-related is committed.
+- Torrent streaming runs in memory; nothing is written to disk.
+- Network requests go to the sites you browse or play (and their thumbnail hosts), your torrent index and its peers, AniList (covers), GitHub (anime episode mappings, refreshed weekly), and AniSkip / MyAnimeList (`autochapters`).
 
 ---
 
 ## 🔧 Troubleshooting
 
-- **Audio cuts out, drops, or goes silent for a moment right after seeking, unpausing, or skipping to the next track/file.** Known issue with older or budget HDMI A/V receivers (AVRs) / soundbars that ignore or drop the first bit of audio every time HDMI audio output stops and restarts. Fix: uncomment `audio-stream-silence=yes` in `mpv.conf` (commented out by default since v1.0.12 — mpv's own manual calls it "strongly discouraged" since it changes A/V-sync and underrun handling for every file, so it's opt-in rather than on by default now).
-- **Audio is too loud/quiet, or inconsistent between quiet and loud scenes/streams.** Uncomment `af=lavfi=[dynaudnorm=f=150:g=15:p=0.95]` in `mpv.conf` (commented out by default) — a single-pass, live-stream-safe loudness normalizer. Unlike `loudnorm`, it doesn't need to buffer the whole file first, so it's safe for live/HLS streams too.
-- **Kick.com videos won't load / fail to fetch metadata.** Confirmed to be [yt-dlp#17284](https://github.com/yt-dlp/yt-dlp/issues/17284), an open upstream bug — Kick changed something site-side that broke yt-dlp's extractor (VODs, Live, and Clips all affected). Not a config issue here; should resolve itself once yt-dlp ships a fix. Re-run `1_Full_Latest_MPV_Installer.ps1` periodically to pick up new yt-dlp versions.
-- **`autochapters` warns "couldn't parse media filename, is guessit installed?"** Needs `guessit.exe` in the install root — `1_Full_Latest_MPV_Installer.ps1` downloads this automatically; if you installed before that was added, just re-run the installer.
-- **HDR isn't switching/passing through.** `hdr-mode.lua` needs the companion [mpv-display-plugin](https://github.com/dyphire/mpv-display-plugin) (`scripts/display-info.dll`) for display capability info — without it, `hdr_mode` has nothing to act on.
-- **Enabled `nvidia_true_hdr` but nothing changes.** Needs mpv 0.40+, RTX Video HDR enabled in the NVIDIA app, an SDR (8-bit) source, and the display already in HDR mode — `vsr_autocrop.lua` checks that last part itself via `mpv-display-plugin` before applying anything, since mpv's own filter has no such check and can visibly misbehave on an SDR display ([mpv#17800](https://github.com/mpv-player/mpv/issues/17800)). If the plugin isn't installed, this option is silently a permanent no-op.
-- **The Open Folder / Open URL dialogs look light-mode even in a dark theme.** Expected — both use legacy pre-Vista Windows APIs (`Shell.Application.BrowseForFolder`, VB.NET's `InputBox`) that predate dark mode and were never retrofitted for it. Open File/Add Subtitle/Add Audio use the modern dialog, which does follow system theme automatically.
-- **Configuration Manager is light-mode even in a dark theme.** Same underlying reason as above, different cause: it's a plain WPF window, and WPF (unlike the modern `IFileDialog`-based open/subtitle/audio pickers) doesn't auto-theme on Windows 11 without custom styling work. Cosmetic only.
-- **Changed a setting in Configuration Manager but nothing's different.** Expected if mpv was already running — it edits the config files mpv reads at launch, not a running instance. Restart mpv (or launch it fresh) to pick up the change.
-- **Twitch plays at 1080p, not 1440p.** Twitch only serves the 1440p60 "Source" rendition to logged-in accounts. Either `yt-dlp-cookies.txt` is missing, or you logged out of Twitch in the browser and the `auth-token` cookie died with the session. Re-export the twitch.tv cookies (Installation step 3) and merge them into the file. To confirm: `yt-dlp.exe --cookies yt-dlp-cookies.txt -F https://twitch.tv/<channel>` should list a 2560x1440 HEVC format.
-- **YouTube Subscriptions / History / Watch later come back empty**, or yt-dlp warns "The provided YouTube account cookies are no longer valid". The YouTube cookies were taken from a live browser session and got rotated. Re-export them from a fresh private window on `youtube.com/robots.txt`, then close that window before playing anything (Installation step 3).
-- **Twitch `Live channels` shows nobody / not my follows.** Twitch's GraphQL API returns "service error" for the follow list to any third-party client; this is not fixable from our side. Fill `twitch_channels=` in `script-opts/browse.conf` with the logins you care about, comma-separated.
-- **`Open > Torrents` is missing**, or a torrent binding says "set torrent_search_url=". Both index URLs in `script-opts/browse.conf` are empty (Installation step 4). "index feed failed" with a curl message means the index did not answer; "index did not return an RSS feed" means the URL is a web page, not its RSS variant.
-- **Picking a release shows a black window and never plays.** The hook logs `Running WebTorrent hook` then nothing: no peers were found (check seeders in the row, try a `trusted` release), or `node.exe` is missing from `PATH` / blocked by the firewall. `Ctrl+Shift+t` shows peers and speed while it buffers.
-- **A shader profile does nothing, or the log says `Too many constant buffers`.** The ArtCNN C4F32 and `_CMP` compute builds exceed d3d11's 14-cbuffer / 32 KB group-shared-memory limits and libplacebo silently disables the hook after the first frame. Only the C4F16 variants work on `gpu-api=d3d11`; do not add the larger builds unless you switch to `gpu-api=vulkan`, which loses RTX VSR.
-- **4K HDR stutters / drops frames at high refresh rates.** Make sure `video-sync=audio` is still set (the Configuration Manager can switch it). `display-resample` measurably dropped frames on 2160p HDR at 240 Hz.
+<details>
+<summary><b>Twitch plays at 1080p, not 1440p</b></summary>
+
+Twitch only serves the 1440p60 *Source* rendition to logged-in accounts. Either `yt-dlp-cookies.txt` is missing, or you logged out of Twitch in the browser and the `auth-token` died with the session. Re-export the twitch.tv cookies (Installation step 3). To check:
+
+```powershell
+.\yt-dlp.exe --cookies yt-dlp-cookies.txt -F https://twitch.tv/<channel>   # should list a 2560x1440 HEVC format
+```
+
+</details>
+
+<details>
+<summary><b>YouTube feeds are empty, or "cookies are no longer valid"</b></summary>
+
+The YouTube cookies came from a live browser session and were rotated. Re-export them from a fresh private window on `youtube.com/robots.txt` and close that window before playing anything (Installation step 3).
+</details>
+
+<details>
+<summary><b>Twitch <i>Live channels</i> shows nobody</b></summary>
+
+Twitch's GraphQL API answers "service error" to third-party clients asking for the follow list. Fill `twitch_channels=` in `script-opts/browse.conf` with the logins you care about, comma-separated.
+</details>
+
+<details>
+<summary><b><i>Open > Torrents</i> is missing, or a binding says "set torrent_search_url="</b></summary>
+
+Both index URLs in `script-opts/browse.conf` are empty (Installation step 4). "index feed failed" with a curl message means the index did not answer; "index did not return an RSS feed" means the URL is a web page, not its RSS variant.
+</details>
+
+<details>
+<summary><b>A release shows a black window and never plays</b></summary>
+
+The log says `Running WebTorrent hook` and then nothing: no peers were found (check the seeder count, try a `trusted` release), or `node.exe` is missing from `PATH` or blocked by the firewall. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>t</kbd> shows peers and speed while it buffers.
+</details>
+
+<details>
+<summary><b>A shader profile does nothing, or the log says <code>Too many constant buffers</code></b></summary>
+
+Only ArtCNN C4F16 builds work on `gpu-api=d3d11`. Do not add C4F32 or `_CMP` builds unless you switch to `gpu-api=vulkan`, which loses RTX VSR.
+</details>
+
+<details>
+<summary><b>4K HDR stutters or drops frames at high refresh rates</b></summary>
+
+Make sure `video-sync=audio` is still set (the Configuration Manager can switch it). `display-resample` measurably dropped frames on 2160p HDR at 240 Hz.
+</details>
+
+<details>
+<summary><b>HDR is not passing through / RTX Video HDR does nothing</b></summary>
+
+`hdr-mode.lua` needs `scripts/display-info.dll` ([mpv-display-plugin](https://github.com/dyphire/mpv-display-plugin)). RTX Video HDR additionally needs mpv 0.40+, RTX Video HDR enabled in the NVIDIA app, an 8-bit SDR source, and the display already in HDR mode. Without the plugin, `nvidia_true_hdr` is a permanent no-op.
+</details>
+
+<details>
+<summary><b>Audio drops for a moment after seeking, unpausing or changing files</b></summary>
+
+Common with HDMI receivers and soundbars that drop the first bit of audio when the stream restarts. Uncomment `audio-stream-silence=yes` in `mpv.conf`. It is opt-in because mpv's manual discourages it: it changes A/V sync and underrun handling for every file.
+</details>
+
+<details>
+<summary><b>Loudness jumps between scenes or streams</b></summary>
+
+Uncomment `af=lavfi=[dynaudnorm=f=150:g=15:p=0.95]` in `mpv.conf`. Unlike `loudnorm`, it does not buffer the whole file, so it is safe for live streams.
+</details>
+
+<details>
+<summary><b>Kick videos will not load</b></summary>
+
+Upstream yt-dlp bug, [yt-dlp#17284](https://github.com/yt-dlp/yt-dlp/issues/17284). Re-run `1_Full_Latest_MPV_Installer.ps1` periodically to pick up the fix.
+</details>
+
+<details>
+<summary><b><code>autochapters</code> warns "is guessit installed?"</b></summary>
+
+`guessit.exe` must be in the install root. Script 1 downloads it; re-run it if you installed before that was added.
+</details>
+
+<details>
+<summary><b>Open Folder / Open URL dialogs or the Configuration Manager are light mode</b></summary>
+
+Expected. Those dialogs use pre-Vista Windows APIs, and plain WPF does not follow the Windows 11 theme. Open File / Add Subtitle / Add Audio use the modern dialog and do follow it.
+</details>
+
+<details>
+<summary><b>Changed a setting in the Configuration Manager and nothing changed</b></summary>
+
+It edits the files mpv reads at launch. Restart mpv.
+</details>
+
+---
+
+## 📚 Documentation
+
+| Where | What |
+|---|---|
+| [`CHANGELOG.md`](CHANGELOG.md) | Every version, newest first |
+| [`CONTEXT.md`](CONTEXT.md) | Glossary of the project's terms |
+| [`docs/adr/`](docs/adr/) | Architecture decision records |
+| [`docs/testing.md`](docs/testing.md) | Synthetic test clips, probes, how to drive the UI from a script, the test suite |
+| [`doc/research-rtx-vsr-vs-shaders.md`](doc/research-rtx-vsr-vs-shaders.md) | Why shaders and VSR cannot stack, with measurements |
+| [`doc/research-osc-modernz-vs-uosc.md`](doc/research-osc-modernz-vs-uosc.md) | Why ModernZ is the only OSC |
+| `doc/manual.pdf`, `doc/mpbindings.png` | mpv manual and default binding chart |
+
+Issues and requests: [GitHub Issues](https://github.com/samkovacs/mpv-echo-hc/issues).
+
+---
+
+## 🙏 Credits
+
+Built on the work of:
+
+- [mpv](https://mpv.io/), [FFmpeg](https://ffmpeg.org/), [yt-dlp](https://github.com/yt-dlp/yt-dlp), [guessit](https://github.com/guessit-io/guessit)
+- [Echo-Storm/MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia-VSR): the upstream config, `vsr_autocrop.lua` and the `*_echostorm` scripts
+- [Samillion/ModernZ](https://github.com/Samillion/ModernZ) and [mpv-ytdlautoformat](https://github.com/Samillion/mpv-ytdlautoformat)
+- [po5/thumbfast](https://github.com/po5/thumbfast), [evafast](https://github.com/po5/evafast), [chapterskip](https://github.com/po5/chapterskip), [mpv-auto-chapters](https://github.com/po5/mpv-auto-chapters)
+- [dyphire/mpv-display-plugin](https://github.com/dyphire/mpv-display-plugin) and [mpv-scripts](https://github.com/dyphire/mpv-scripts) (`hdr-mode.lua`)
+- [mrxdst/webtorrent-mpv-hook](https://github.com/mrxdst/webtorrent-mpv-hook)
+- Shaders: [ArtCNN](https://github.com/Artoriuz/ArtCNN), [Anime4K](https://github.com/bloc97/Anime4K), [mpv-prescalers](https://github.com/bjin/mpv-prescalers) (NNEDI3, RAVU), [FSRCNNX](https://github.com/igv/FSRCNN-TensorFlow)
+- Data: [AniList](https://anilist.co/), [Fribb/anime-lists](https://github.com/Fribb/anime-lists), [erengy/anime-relations](https://github.com/erengy/anime-relations)
+- Colours: [Solarized](https://ethanschoonover.com/solarized/) by Ethan Schoonover
 
 ---
 
 ## 📋 Changelog
 
-Full version history in [CHANGELOG.md](CHANGELOG.md). Latest:
+Full history in [CHANGELOG.md](CHANGELOG.md). Latest:
 
-### 2026-09-04 — echo-HC v0.03: Torrents source in browse.lua, in-memory streaming
+### 2026-09-23 — echo-HC v0.04: Solarized Dark, which-key, browser polish
 
-- **`Open > Torrents`**: search, new releases and a followed-show list from a user-configured RSS index (the repo names none), grouped by show and ordered by episode / resolution / seeders, covers from AniList in the grid.
-- **`webtorrent.js`** wired up in memory mode; patched so a second release in the same session replaces the first. `Ctrl+Shift+t` toggles the transfer overlay.
+- **Solarized Dark theme** across ModernZ, OSD, console / select menus, stats graphs and the pause indicator; ModernZ patch for an animated gradient seekbar.
+- **`whichkey.lua`**: <kbd>g</kbd> and <kbd>b</kbd> prefix panels.
+- **Browser**: reopen last results, <kbd>Shift</kbd>+<kbd>Enter</kbd> queues, per-source search memory, Twitch live sorted by viewers with uptime; torrent rows show resolved `S##E##` and AniList covers per show.
+- **Fixes**: thumbfast thumbnails for YouTube and cropped Twitch VODs, no VO rebuild at HDR start, crop-detect retries no longer drop frames, `autodeint` ordering before VSR.
 
-### 2026-09-03 — echo-HC v0.02: in-mpv YouTube/Twitch browser, login cookies, ArtCNN, 240 Hz tuning
+---
 
-- **`browse.lua`**: YouTube search and account feeds, Twitch search and live list, list and thumbnail-grid views, fuzzy filter, mouse support.
-- **Login cookies** for yt-dlp via one `yt-dlp-cookies.txt`: Twitch 1440p Source and YouTube feeds/mark-watched. Path is portable (`~~home/../`), no absolute paths in the config.
-- **Shaders**: ArtCNN C4F16 (+DS) replace the C4F32 builds, which do not compile on d3d11. Shaders take precedence over VSR.
-- **Removed**: uosc, inputevent, playlistmanager, memo, exclusive fullscreen, nlmeans. ModernZ is the sole OSC.
-- **`video-sync=audio`**, `deband=yes`, `inverse-tone-mapping=yes`, per-display HDR target owned by `hdr-mode.lua`.
-- Repo hygiene: `.gitattributes`, installer markers and agent notes gitignored, `CLAUDE.md` + `docs/agents/` for the engineering skills.
+## 📄 License
+
+[MIT](LICENSE). Bundled third-party scripts, shaders and fonts keep their own licenses.
