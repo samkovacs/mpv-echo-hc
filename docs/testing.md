@@ -41,8 +41,11 @@ grep -c -E "^\[[0-9. ]+\]\[(e|w)\]\[ffmpeg" validate.log   # expect 0
 **480i60 TFF and a progressive match** (autodeint). The progressive one must not be `testsrc2`: its fine moving lines read as interlaced to idet even in plain ffmpeg (48 TFF, 30 BFF, 12 progressive in 3 s).
 
 ```sh
-./ffmpeg.exe -y -f lavfi -i "testsrc2=s=720x480:r=60000/1001" -t 30 \n  -vf "tinterlace=mode=interleave_top,setfield=tff" -c:v libx264 -flags +ilme+ildct \n  -x264-params tff=1 -pix_fmt yuv420p int480i.mkv
-./ffmpeg.exe -y -f lavfi -i "gradients=s=720x480:r=30000/1001:speed=0.02" -t 30 \n  -c:v libx264 -pix_fmt yuv420p prog480.mkv
+./ffmpeg.exe -y -f lavfi -i "testsrc2=s=720x480:r=60000/1001" -t 30 \
+  -vf "tinterlace=mode=interleave_top,setfield=tff" -c:v libx264 -flags +ilme+ildct \
+  -x264-params tff=1 -pix_fmt yuv420p int480i.mkv
+./ffmpeg.exe -y -f lavfi -i "gradients=s=720x480:r=30000/1001:speed=0.02" -t 30 \
+  -c:v libx264 -pix_fmt yuv420p prog480.mkv
 ```
 
 **Pretty demo clip for screenshots** (muted gradient, no test pattern):
@@ -113,7 +116,9 @@ With a shader profile active the script must log that VSR is skipped (ADR-0002).
 autodeint (Ctrl+d) must put its filters before `@vsr`, undo them on the next file and survive a file change mid-detection. Needs a window larger than the clip so `@vsr` is in the chain:
 
 ```sh
-./mpv.exe --window-scale=2 --volume=0 --no-resume-playback --save-position-on-quit=no \n  --script-opts-append=autoload-disabled=yes --script-opts-append=autodeint.detect_seconds=2 \n  --script=docs/tests/autodeint_test.lua int480i.mkv prog480.mkv 2>&1 | grep -E "FAIL|ALL PASS"
+./mpv.exe --window-scale=2 --volume=0 --no-resume-playback --save-position-on-quit=no \
+  --script-opts-append=autoload-disabled=yes --script-opts-append=autodeint.detect_seconds=2 \
+  --script=docs/tests/autodeint_test.lua int480i.mkv prog480.mkv 2>&1 | grep -E "FAIL|ALL PASS"
 ```
 
 ## HDR target
