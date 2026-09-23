@@ -40,6 +40,8 @@ local hdr_active = false
 local hdr_supported = false
 local first_switch_check = true
 local file_loaded = false
+-- Everything switch_hdr() decides on, from its last run. See switch_hdr().
+local last_switch_key = nil
 
 local state = {
     icc_profile = mp.get_property_native("icc-profile"),
@@ -222,6 +224,18 @@ local function switch_hdr()
     local is_hdr = max_luma and max_luma > 203
     if not path or not gamma then return end
 
+    -- hdr-compute-peak=yes ([HDR] profile) adds per-frame avg-pq-y/max-pq-y
+    -- to video-out-params, so this observer fires on every frame of HDR
+    -- content; re-applying the whole render target each time was 8 property
+    -- writes per frame. Only act when something decided on below changed.
+    -- Drift of target-* by another writer is check_paramet()'s job.
+    local key = table.concat({path, gamma, tostring(is_hdr), tostring(hdr_active),
+        tostring(mp.get_property_native("fullscreen")),
+        tostring(mp.get_property_native("window-maximized")),
+        effective_peak(), o.hdr_mode}, "|")
+    if key == last_switch_key then return end
+    last_switch_key = key
+
     -- Peak/contrast resolution used to happen here, writing its results
     -- back into `o` and latching them for the session. It now lives in
     -- effective_peak()/effective_contrast(), evaluated at the point of
@@ -341,8 +355,12 @@ local function on_start()
         return
     end
     file_loaded = true
+    last_switch_key = nil
     query_hdr_state()
     mp.observe_property("video-out-params", "native", switch_hdr)
+    -- A move between two HDR displays changes the peak but not hdr-status;
+    -- the per-frame video-out-params fires used to catch that by accident.
+    mp.observe_property("user-data/display-info/max-luminance", "native", switch_hdr)
     mp.observe_property("target-peak", "native", check_paramet)
     mp.observe_property("target-prim", "native", check_paramet)
     mp.observe_property("target-trc", "native", check_paramet)

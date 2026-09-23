@@ -113,6 +113,12 @@ grep -E "tone map|\(4[0-9]{2} -> [0-9]+\)" probe.log
 
 Reference: `spline tone map (480 -> 603)` on the primary display (ADR-0006).
 
+`hdr-mode.lua` must not rewrite the render target per frame (`hdr-compute-peak=yes` makes `video-out-params` change every frame). Simulates Windows HDR on through the display plugin's `hdr-status`, so it works with HDR off and touches no display:
+
+```sh
+sh docs/tests/hdr_mode_writes_test.sh   # PASS: a few target-peak writes; FAIL: ~115 in 5 s
+```
+
 ## UI scripts (browse.lua, ModernZ, menu)
 
 Drive the UI from a `--script=` Lua rather than by hand. Relevant commands:
