@@ -10,6 +10,9 @@
 
 # mpv echo-HC edition
 
+> [!WARNING]
+> **This project is vibe coded.** Most of the scripts, patches and docs were written with AI coding assistants and tested on one machine (RTX 3080 Ti, Windows 11, 240 Hz HDR). It works for me; read the code before you trust it with yours, and expect rough edges.
+
 A fork of [Echo-Storm's MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia-VSR) config: portable mpv for Windows that upscales with **NVIDIA RTX Video Super Resolution**, passes **HDR** through per display, and browses **YouTube, Twitch and an anime torrent index** from inside the player. Retuned for a 240 Hz HDR display and themed **Solarized Dark** end to end.
 
 > [!NOTE]
@@ -29,9 +32,9 @@ A fork of [Echo-Storm's MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia
 - [Privacy](#-privacy)
 - [Troubleshooting](#-troubleshooting)
 - [Documentation](#-documentation)
-- [Credits](#-credits)
 - [Changelog](#-changelog)
 - [License](#-license)
+- [Built on](#-built-on)
 
 </details>
 
@@ -434,22 +437,6 @@ Issues and requests: [GitHub Issues](https://github.com/samkovacs/mpv-echo-hc/is
 
 ---
 
-## 🙏 Credits
-
-Built on the work of:
-
-- [mpv](https://mpv.io/), [FFmpeg](https://ffmpeg.org/), [yt-dlp](https://github.com/yt-dlp/yt-dlp), [guessit](https://github.com/guessit-io/guessit)
-- [Echo-Storm/MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia-VSR): the upstream config, `vsr_autocrop.lua` and the `*_echostorm` scripts
-- [Samillion/ModernZ](https://github.com/Samillion/ModernZ) and [mpv-ytdlautoformat](https://github.com/Samillion/mpv-ytdlautoformat)
-- [po5/thumbfast](https://github.com/po5/thumbfast), [evafast](https://github.com/po5/evafast), [chapterskip](https://github.com/po5/chapterskip), [mpv-auto-chapters](https://github.com/po5/mpv-auto-chapters)
-- [dyphire/mpv-display-plugin](https://github.com/dyphire/mpv-display-plugin) and [mpv-scripts](https://github.com/dyphire/mpv-scripts) (`hdr-mode.lua`)
-- [mrxdst/webtorrent-mpv-hook](https://github.com/mrxdst/webtorrent-mpv-hook)
-- Shaders: [ArtCNN](https://github.com/Artoriuz/ArtCNN), [Anime4K](https://github.com/bloc97/Anime4K), [mpv-prescalers](https://github.com/bjin/mpv-prescalers) (NNEDI3, RAVU), [FSRCNNX](https://github.com/igv/FSRCNN-TensorFlow)
-- Data: [AniList](https://anilist.co/), [Fribb/anime-lists](https://github.com/Fribb/anime-lists), [erengy/anime-relations](https://github.com/erengy/anime-relations)
-- Colours: [Solarized](https://ethanschoonover.com/solarized/) by Ethan Schoonover
-
----
-
 ## 📋 Changelog
 
 Full history in [CHANGELOG.md](CHANGELOG.md). Latest:
@@ -466,3 +453,29 @@ Full history in [CHANGELOG.md](CHANGELOG.md). Latest:
 ## 📄 License
 
 [MIT](LICENSE). Bundled third-party scripts, shaders and fonts keep their own licenses.
+
+---
+
+## 🙏 Built on
+
+This is a config, not a player. Everything good here comes from these projects; go star them.
+
+| Project | What it brings |
+|---|---|
+| [**mpv**](https://github.com/mpv-player/mpv) | The player itself, plus its `select.lua`, `console.lua`, `stats.lua`, `autoload.lua` and `autodeint.lua` |
+| [**Echo-Storm/MPV-Nvidia-VSR**](https://github.com/Echo-Storm/MPV-Nvidia-VSR) | The upstream this is forked from: the portable layout, installer scripts, Configuration Manager, `vsr_autocrop.lua` and every `*_echostorm` script |
+| [**Samillion/ModernZ**](https://github.com/Samillion/ModernZ) | The OSC, the pause indicator and the open-file dialog extras |
+| [**Samillion/mpv-ytdlautoformat**](https://github.com/Samillion/mpv-ytdlautoformat) | Per-site `ytdl-format` |
+| [**rossy/mpv-open-file-dialog**](https://github.com/rossy/mpv-open-file-dialog) | The original native Windows open-file dialog |
+| [**po5/thumbfast**](https://github.com/po5/thumbfast) | Seekbar thumbnails |
+| [**po5/evafast**](https://github.com/po5/evafast) | Hold-to-fast-forward |
+| [**po5/chapterskip**](https://github.com/po5/chapterskip) | OP / ED / preview chapter skipping |
+| [**po5/mpv-auto-chapters**](https://github.com/po5/mpv-auto-chapters) | Anime OP / ED chapter lookup |
+| [**4e6/mpv-reload**](https://github.com/4e6/mpv-reload) | Auto-reload of stalled streams |
+| [**dyphire/mpv-display-plugin**](https://github.com/dyphire/mpv-display-plugin) | Display HDR capability info (`display-info.dll`) |
+| [**dyphire/mpv-scripts**](https://github.com/dyphire/mpv-scripts) | `hdr-mode.lua` |
+| [**mrxdst/webtorrent-mpv-hook**](https://github.com/mrxdst/webtorrent-mpv-hook) | In-memory torrent streaming |
+| [**yt-dlp**](https://github.com/yt-dlp/yt-dlp), [**FFmpeg**](https://ffmpeg.org/), [**guessit**](https://github.com/guessit-io/guessit) | Streams, thumbnails and clip export, filename parsing |
+| [**Artoriuz/ArtCNN**](https://github.com/Artoriuz/ArtCNN), [**bloc97/Anime4K**](https://github.com/bloc97/Anime4K), [**bjin/mpv-prescalers**](https://github.com/bjin/mpv-prescalers), [**igv/FSRCNN-TensorFlow**](https://github.com/igv/FSRCNN-TensorFlow) | Shaders (ArtCNN, Anime4K, NNEDI3 / RAVU, FSRCNNX) |
+| [**AniList**](https://anilist.co/), [**Fribb/anime-lists**](https://github.com/Fribb/anime-lists), [**erengy/anime-relations**](https://github.com/erengy/anime-relations) | Covers and anime episode numbering |
+| [**Solarized**](https://ethanschoonover.com/solarized/) by Ethan Schoonover | The colour palette |
