@@ -48,3 +48,6 @@ yt-dlp-cookies.txt
 
 # Local agent handoff notes: machine specs, profile names, absolute paths
 RESUME.md
+
+# mpv ~~cache: browse.lua search prompt history
+portable_config/cache/

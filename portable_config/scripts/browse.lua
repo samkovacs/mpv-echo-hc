@@ -18,9 +18,11 @@
 --   browse/torrent-search          prompt for a query, list releases
 --   browse/torrent-new             newest releases on the index
 --   browse/torrent-followed        releases of script-opts torrent_shows
+--   browse/reopen                  the last result list, focused on what played
 --
 -- Results show as a list or a 4x3 thumbnail grid (script-opts view=list|grid,
--- Tab toggles while open). Type to fuzzy-filter, Enter loads, Esc closes.
+-- Tab toggles while open). Type to fuzzy-filter, Enter loads, Shift+Enter
+-- appends to the playlist, Esc closes.
 -- Mouse: hover focuses a row/tile, left click loads it, wheel scrolls.
 
 local utils = require "mp.utils"
@@ -623,14 +625,16 @@ local function hit_test(x, y)
     return h.first + k
 end
 
-local function activate()
+-- mode: "replace" plays it now, "append-play" queues it
+local function activate(mode)
     local row = list.view[list.cursor]
     if not row then return end
     local e = list.entries[row.i]
     local url = e.url or e.webpage_url
+    list.last = e
     list_close()
-    mp.commandv("loadfile", url, "replace")
-    mp.osd_message("Loading: " .. (e.title or url), 3)
+    mp.commandv("loadfile", url, mode)
+    mp.osd_message((mode == "replace" and "Loading: " or "Queued: ") .. (e.title or url), 3)
 end
 
 -- hover moves the focus
@@ -702,14 +706,15 @@ local function show_results(prompt, entries)
             list_filter()
             list_draw()
         end,
-        ENTER = activate,
+        ENTER = function() activate("replace") end,
+        ["Shift+ENTER"] = function() activate("append-play") end,
         -- click on the hovered row/tile loads it; clicks elsewhere do nothing
         MBTN_LEFT = function()
             local pos = mp.get_property_native("mouse-pos")
             local i = pos and hit_test(pos.x, pos.y)
             if i then
                 list.cursor = i
-                activate()
+                activate("replace")
             end
         end,
     }
@@ -731,6 +736,33 @@ local function show_results(prompt, entries)
     list.keys[#list.keys + 1] = "SPACE"
     mp.add_forced_key_binding("SPACE", "browse-SPACE", function() type_text(" ") end, {repeatable = true})
     list_draw()
+end
+
+-- The closed list keeps its entries, so it reopens without a new fetch,
+-- focused on the entry last played or queued from it.
+mp.add_key_binding(nil, "reopen", function()
+    if #list.entries == 0 then return mp.osd_message("browse: no results to reopen", 3) end
+    show_results(list.prompt, list.entries)
+    for k, r in ipairs(list.view) do
+        if list.entries[r.i] == list.last then list.cursor = k end
+    end
+    list_draw()
+end)
+
+-- Search prompt per source. The console keeps an Up/Down history per id,
+-- saved to history_path; the prompt opens on the source's last query.
+local last_query = {}
+local function ask(id, prompt, cb)
+    input.get({
+        prompt = prompt, id = "browse-" .. id, default_text = last_query[id],
+        history_path = "~~cache/browse-" .. id .. ".history",
+        submit = function(text)
+            input.terminate()
+            if text:match("^%s*$") then return end
+            last_query[id] = text
+            cb(text)
+        end,
+    })
 end
 
 local function fetch(prompt, url)
@@ -765,14 +797,9 @@ local function fetch(prompt, url)
 end
 
 mp.add_key_binding(nil, "youtube-search", function()
-    input.get({
-        prompt = "YouTube search: ",
-        submit = function(text)
-            input.terminate()
-            if text:match("^%s*$") then return end
-            fetch("YouTube: " .. text, "ytsearch" .. RESULTS .. ":" .. text)
-        end,
-    })
+    ask("youtube", "YouTube search: ", function(text)
+        fetch("YouTube: " .. text, "ytsearch" .. RESULTS .. ":" .. text)
+    end)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -841,6 +868,7 @@ local function twitch_entry(user)
         title = string.format("%s: %s", user.displayName or user.login, s.title or ""),
         channel = (s.game and s.game.displayName or "") ..
                   string.format(" %d viewers", s.viewersCount or 0),
+        viewers = s.viewersCount or 0,
         live_status = "is_live",
         url = "https://www.twitch.tv/" .. user.login,
         thumbnail = s.previewImageURL,
@@ -853,7 +881,7 @@ local function show_live(users)
     for _, u in ipairs(users) do
         if u and u.stream then entries[#entries + 1] = twitch_entry(u) end
     end
-    table.sort(entries, function(a, b) return a.channel > b.channel end)
+    table.sort(entries, function(a, b) return a.viewers > b.viewers end)
     show_results("Twitch: live now", entries)
 end
 
@@ -880,29 +908,24 @@ mp.add_key_binding(nil, "twitch-live", function()
 end)
 
 mp.add_key_binding(nil, "twitch-search", function()
-    input.get({
-        prompt = "Twitch search: ",
-        submit = function(text)
-            input.terminate()
-            if text:match("^%s*$") then return end
-            mp.osd_message("browse: searching Twitch...", 30)
-            twitch_gql(string.format([[
-                query { searchFor(userQuery: %s, platform: "web") {
-                    channels { edges { item { ... on User {
-                        login displayName
-                        stream { title viewersCount game { displayName } previewImageURL(width: 640, height: 360) }
-                    } } } } } }]], utils.format_json(text)),
-                function(d)
-                    local entries = {}
-                    for _, e in ipairs(d.searchFor.channels.edges) do
-                        if e.item and e.item.stream then
-                            entries[#entries + 1] = twitch_entry(e.item)
-                        end
+    ask("twitch", "Twitch search: ", function(text)
+        mp.osd_message("browse: searching Twitch...", 30)
+        twitch_gql(string.format([[
+            query { searchFor(userQuery: %s, platform: "web") {
+                channels { edges { item { ... on User {
+                    login displayName
+                    stream { title viewersCount game { displayName } previewImageURL(width: 640, height: 360) }
+                } } } } } }]], utils.format_json(text)),
+            function(d)
+                local entries = {}
+                for _, e in ipairs(d.searchFor.channels.edges) do
+                    if e.item and e.item.stream then
+                        entries[#entries + 1] = twitch_entry(e.item)
                     end
-                    show_results("Twitch: " .. text, entries)
-                end)
-        end,
-    })
+                end
+                show_results("Twitch: " .. text, entries)
+            end)
+    end)
 end)
 
 local feeds = {
@@ -954,17 +977,12 @@ end
 mp.add_key_binding(nil, "torrent-search", function()
     if opts.torrent_search_url == "" then return torrent_config_message() end
     ensure_lists()
-    input.get({
-        prompt = "Torrent search: ",
-        submit = function(text)
-            input.terminate()
-            if text:match("^%s*$") then return end
-            mp.osd_message("browse: searching index...", 30)
-            fetch_feed(torrents.search_url(opts.torrent_search_url, text), nil, function(entries)
-                if entries then show_results("Torrents: " .. text, torrents.order(entries)) end
-            end)
-        end,
-    })
+    ask("torrent", "Torrent search: ", function(text)
+        mp.osd_message("browse: searching index...", 30)
+        fetch_feed(torrents.search_url(opts.torrent_search_url, text), nil, function(entries)
+            if entries then show_results("Torrents: " .. text, torrents.order(entries)) end
+        end)
+    end)
 end)
 
 mp.add_key_binding(nil, "torrent-new", function()
