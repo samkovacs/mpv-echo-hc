@@ -29,7 +29,6 @@ A fork of [Echo-Storm's MPV-Nvidia-VSR](https://github.com/Echo-Storm/MPV-Nvidia
 - [Features in detail](#-features-in-detail)
 - [Configuration Manager](#%EF%B8%8F-configuration-manager)
 - [Folder structure](#-folder-structure)
-- [Privacy](#-privacy)
 - [Troubleshooting](#-troubleshooting)
 - [Documentation](#-documentation)
 - [Changelog](#-changelog)
@@ -318,14 +317,6 @@ MPV/
 ```
 
 </details>
-
----
-
-## 🔒 Privacy
-
-- `yt-dlp-cookies.txt`, watch history, watch-later state, the search-prompt cache and the installer's local markers are all **gitignored**. Nothing account-related is committed.
-- Torrent streaming runs in memory; nothing is written to disk.
-- Network requests go to the sites you browse or play (and their thumbnail hosts), your torrent index and its peers, AniList (covers), GitHub (anime episode mappings, refreshed weekly), and AniSkip / MyAnimeList (`autochapters`).
 
 ---
 
