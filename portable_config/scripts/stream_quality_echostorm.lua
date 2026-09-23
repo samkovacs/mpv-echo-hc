@@ -66,7 +66,7 @@ local function set_quality(index)
         return
     end
 
-    mp.set_property("file-local-options/ytdl-format", "bv[height<=?" .. height .. "]+ba/b")
+    mp.set_property("file-local-options/ytdl-format", "bv[height<=?" .. height .. "]+ba/b[height<=?" .. height .. "]/b")
     mp.set_property("file-local-options/start", tostring(mp.get_property_number("time-pos") or 0))
     mp.commandv("playlist-play-index", "current", "yes")
     mp.osd_message("Stream quality: " .. height .. "p (reloading...)", 2)

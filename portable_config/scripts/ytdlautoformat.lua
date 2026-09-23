@@ -118,7 +118,7 @@ local function update_ytdl_format()
         fallback = options.fallback and " / " .. options.fallback_format or "",
     }
 
-    local ytdl_custom = "bv" .. format.quality .. format.codec .. format.fps .. format.ext .. "+ba/b" .. format.fallback
+    local ytdl_custom = "bv" .. format.quality .. format.codec .. format.fps .. format.ext .. "+ba/b" .. format.quality .. format.fps .. format.fallback
     state.last_format = ytdl_custom
 
     mp.set_property("file-local-options/ytdl-format", ytdl_custom)
