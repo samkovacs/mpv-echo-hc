@@ -165,8 +165,17 @@ local function render_title(e, max_chars, focused, matched)
     local pre, name, post = title_parts(e)
     local np, nn = #chars(pre), #chars(name)
     local short = truncate(name, math.max(1, max_chars - np - #chars(post)))
-    return render(pre, C_CHANNEL, 0, matched) .. render(short, focused and C_FOCUS or C_TITLE, np, matched) ..
+    -- releases too thin to stream are dimmed; they already sort last in their show
+    local color = focused and C_FOCUS or (torrents.starved(e) and C_DIM or C_TITLE)
+    return render(pre, C_CHANNEL, 0, matched) .. render(short, color, np, matched) ..
            render(post, C_TIME, np + nn, matched), np + nn + #chars(post)
+end
+
+-- "LIVE 2:14:05" (uptime), a duration in `fmt` ("(%s)" in the list), or ""
+local function badge(e, fmt)
+    local d = e.duration and colored(C_TIME, string.format(fmt, fmt_duration(e.duration)))
+    if e.live_status == "is_live" then return colored(C_LIVE, "LIVE") .. (d and " " .. d or "") end
+    return d or ""
 end
 
 local function label(e, focused, matched, max_chars)
@@ -177,11 +186,8 @@ local function label(e, focused, matched, max_chars)
         parts[#parts + 1] = colored(C_CHANNEL, "[") ..
             render(who, C_CHANNEL, n + 1, matched) .. colored(C_CHANNEL, "]")
     end
-    if e.live_status == "is_live" then
-        parts[#parts + 1] = colored(C_LIVE, "LIVE")
-    elseif e.duration then
-        parts[#parts + 1] = colored(C_TIME, "(" .. fmt_duration(e.duration) .. ")")
-    end
+    local b = badge(e, "(%s)")
+    if b ~= "" then parts[#parts + 1] = b end
     return table.concat(parts, "  ")
 end
 
@@ -565,12 +571,9 @@ local function draw_grid(W, H)
                 x, y, C_FOCUS, math.max(2, math.floor(3 * s)), tw, tw, th, th)
         end
         local who = e.channel or e.uploader or ""
-        local line2 = colored(C_CHANNEL, truncate(who, max_chars - 8))
-        if e.live_status == "is_live" then
-            line2 = line2 .. "  " .. colored(C_LIVE, "LIVE")
-        elseif e.duration then
-            line2 = line2 .. "  " .. colored(C_TIME, fmt_duration(e.duration))
-        end
+        local b = badge(e, "%s")
+        local line2 = colored(C_CHANNEL, truncate(who, max_chars - #chars(b:gsub("{[^}]*}", "")) - 2))
+        if b ~= "" then line2 = line2 .. "  " .. b end
         ev[#ev + 1] = string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord1\\3c&H%s&\\shad0\\q2}%s\\N%s",
                                     x, y + th + math.floor(3 * s), fs, C_BACK,
                                     (render_title(e, max_chars, focused, row.matched)),
@@ -861,14 +864,37 @@ local function twitch_gql(query, cb)
     end)
 end
 
+local TWITCH_USER = [[login displayName
+    stream { title viewersCount createdAt game { displayName } previewImageURL(width: 640, height: 360) }]]
+
+-- 950 -> "950", 12345 -> "12.3K", 1234567 -> "1.2M"
+local function fmt_count(n)
+    if n >= 999950 then return (string.format("%.1fM", n / 1e6):gsub("%.0M", "M")) end
+    if n >= 1000 then return (string.format("%.1fK", n / 1e3):gsub("%.0K", "K")) end
+    return tostring(n)
+end
+
+-- "2026-09-22T00:08:49Z" (UTC) -> seconds before `now`, or nil. os.time
+-- reads a table as local time: both sides with isdst=false cancel out the
+-- zone, so the result holds across DST.
+local function utc_age(iso, now)
+    local y, mo, d, h, mi, s = (iso or ""):match("^(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
+    if not y then return nil end
+    local t = os.time({year = y, month = mo, day = d, hour = h, min = mi, sec = s, isdst = false})
+    local u = os.date("!*t", now)
+    u.isdst = false
+    return now - t - (now - os.time(u))
+end
+
 -- Stream node -> entry in the same shape show_results() expects
 local function twitch_entry(user)
     local s = user.stream
     return {
         title = string.format("%s: %s", user.displayName or user.login, s.title or ""),
         channel = (s.game and s.game.displayName or "") ..
-                  string.format(" %d viewers", s.viewersCount or 0),
+                  " " .. fmt_count(s.viewersCount or 0) .. " viewers",
         viewers = s.viewersCount or 0,
+        duration = utc_age(s.createdAt, os.time()), -- uptime, shown after LIVE
         live_status = "is_live",
         url = "https://www.twitch.tv/" .. user.login,
         thumbnail = s.previewImageURL,
@@ -899,31 +925,32 @@ mp.add_key_binding(nil, "twitch-live", function()
         return
     end
     mp.osd_message("browse: checking Twitch channels...", 30)
-    twitch_gql(string.format([[
-        query { users(logins: %s) {
-            login displayName
-            stream { title viewersCount game { displayName } previewImageURL(width: 640, height: 360) }
-        } }]], utils.format_json(logins)),
+    twitch_gql(string.format("query { users(logins: %s) { %s } }", utils.format_json(logins), TWITCH_USER),
         function(d) show_live(d.users) end)
 end)
 
 mp.add_key_binding(nil, "twitch-search", function()
     ask("twitch", "Twitch search: ", function(text)
         mp.osd_message("browse: searching Twitch...", 30)
-        twitch_gql(string.format([[
-            query { searchFor(userQuery: %s, platform: "web") {
-                channels { edges { item { ... on User {
-                    login displayName
-                    stream { title viewersCount game { displayName } previewImageURL(width: 640, height: 360) }
-                } } } } } }]], utils.format_json(text)),
+        twitch_gql(string.format([[query { searchFor(userQuery: %s, platform: "web") {
+                channels { edges { item { ... on User { %s } } } } } }]], utils.format_json(text), TWITCH_USER),
             function(d)
-                local entries = {}
+                local entries, offline = {}, {}
                 for _, e in ipairs(d.searchFor.channels.edges) do
                     if e.item and e.item.stream then
                         entries[#entries + 1] = twitch_entry(e.item)
+                    elseif e.item then
+                        offline[#offline + 1] = e.item.displayName or e.item.login
                     end
                 end
-                show_results("Twitch: " .. text, entries)
+                -- search lists live channels only: say so instead of a bare "no results"
+                if #entries == 0 and #offline > 0 then
+                    local names = table.concat(offline, ", ", 1, math.min(#offline, 5))
+                    return mp.osd_message(string.format("browse: %d Twitch channel%s match, none live: %s%s",
+                        #offline, #offline == 1 and "" or "s", names, #offline > 5 and ", ..." or ""), 6)
+                end
+                show_results("Twitch: " .. text .. (#offline > 0 and "  (+" .. #offline .. " offline)" or ""),
+                             entries)
             end)
     end)
 end)

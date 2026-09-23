@@ -261,6 +261,11 @@ eq("shows trimmed", shows[2].query, "Dandadan")
 eq("search url encodes query", T.search_url("https://example.invalid/?page=rss&q={query}&c=1_2", "Sousou no Frieren & co"),
    "https://example.invalid/?page=rss&q=Sousou%20no%20Frieren%20%26%20co&c=1_2")
 
+-- starved: below SEEDER_FLOOR dims the row; unknown seeders do not
+check("starved below floor", T.starved({seeders = T.SEEDER_FLOOR - 1}))
+check("not starved at floor", not T.starved({seeders = T.SEEDER_FLOOR}))
+check("unknown seeders not starved", not T.starved({}))
+
 print(failed == 0 and "ALL PASS" or (failed .. " FAILED"))
 -- a quit issued while the script is still loading hangs mpv; defer it
 mp.add_timeout(0.5, function() mp.command(failed == 0 and "quit 0" or "quit 1") end)

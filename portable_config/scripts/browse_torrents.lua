@@ -13,6 +13,11 @@ local M = {}
 -- streamable lower-resolution release of the same episode.
 M.SEEDER_FLOOR = 3
 
+-- Below the floor; unknown seeders (feed without the field) are not.
+function M.starved(e)
+    return e.seeders ~= nil and e.seeders < M.SEEDER_FLOOR
+end
+
 local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
 
 local ENTITIES = {amp = "&", lt = "<", gt = ">", quot = '"', apos = "'"}
@@ -236,8 +241,7 @@ function M.order(entries)
         local items = groups[key].items
         if key then
             table.sort(items, function(a, b)
-                local da = a.seeders ~= nil and a.seeders < M.SEEDER_FLOOR
-                local db = b.seeders ~= nil and b.seeders < M.SEEDER_FLOOR
+                local da, db = M.starved(a), M.starved(b)
                 if da ~= db then return db end
                 if (a.episode or -1) ~= (b.episode or -1) then return (a.episode or -1) > (b.episode or -1) end
                 if (a.resolution or 0) ~= (b.resolution or 0) then return (a.resolution or 0) > (b.resolution or 0) end
