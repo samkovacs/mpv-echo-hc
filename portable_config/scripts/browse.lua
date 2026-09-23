@@ -499,8 +499,8 @@ end
 
 local function backdrop(x, y, w, h)
     x, y, w, h = math.floor(x), math.floor(y), math.floor(w), math.floor(h)
-    return string.format("{\\an7\\pos(%d,%d)\\1c&H%s&\\1a&H40&\\bord0\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}",
-                         x, y, C_BACK, w, w, h, h)
+    return string.format("{\\an7\\pos(%d,%d)\\1c&H%s&\\1a&H50&\\bord1\\3c&H%s&\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}",
+                         x, y, C_BACK, C_DIM, w, w, h, h)
 end
 
 -- Both renderers work in window pixels (the canvas is set to osd-width x

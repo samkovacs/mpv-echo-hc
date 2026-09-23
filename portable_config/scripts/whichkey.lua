@@ -59,8 +59,8 @@ local function draw(prefix, items)
     local max_chars = math.floor(cw / (fs * 0.52)) - 4
     -- top of the window: the bottom belongs to ModernZ and subtitles
     local top, bh = m, (rows + 1) * lh + 2 * m
-    local ev = {string.format("{\\an7\\pos(0,0)\\1c&H%s&\\1a&H20&\\bord0\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}",
-                              C_BACK, W, W, bh, bh),
+    local ev = {string.format("{\\an7\\pos(0,0)\\1c&H%s&\\1a&H50&\\bord1\\3c&H%s&\\shad0\\p1}m 0 0 l %d 0 l %d %d l 0 %d{\\p0}",
+                              C_BACK, C_DIM, W, W, bh, bh),
                 string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&H%s&}%s-  {\\1c&H%s&}Esc close",
                               m, top, fs, C_KEY, ass_escape(prefix), C_DIM)}
     for i, it in ipairs(items) do
