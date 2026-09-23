@@ -168,8 +168,8 @@ end
 -- is left at target-peak=auto / target-contrast=auto / image-subs-hdr-peak
 -- =1000 while mpv is emitting a PQ signal.
 --
--- Re-keying the profile on video-out-params does NOT work: the profile sets
--- d3d11-output-format and dither-depth, forcing a VO reconfig that nulls
+-- Re-keying the profile on video-out-params does NOT work: the profile then
+-- set d3d11-output-format, forcing a VO reconfig that nulls
 -- video-out-params, un-firing the condition -- measured flapping between pq
 -- and nil every ~1.5s. So it is applied from here instead, where we know
 -- deterministically and exactly once whether true-HDR was turned on.
@@ -201,7 +201,6 @@ local function restore_hdr_profile()
     -- test, so apply_hdr_settings() runs and the render target comes out
     -- trc=pq prim=bt.2020 peak=603 contrast=inf hint=yes.
     for _, o in ipairs({"sub-hdr-peak", "dither-depth",
-                        "d3d11-output-format", "d3d11-output-csp",
                         "hdr-compute-peak", "video-output-levels"}) do
         mp.commandv("set", o, "auto")
     end

@@ -119,6 +119,12 @@ Reference: `spline tone map (480 -> 603)` on the primary display (ADR-0006).
 sh docs/tests/hdr_mode_writes_test.sh   # PASS: a few target-peak writes; FAIL: ~115 in 5 s
 ```
 
+Starting an HDR file must not rebuild the VO (the old `[HDR]` set `d3d11-output-csp`/`-format`, read only at VO creation). Works with Windows HDR on or off:
+
+```sh
+sh docs/tests/hdr_start_glitch_test.sh   # PASS: 1 GPU context init; FAIL: 2
+```
+
 ## UI scripts (browse.lua, ModernZ, menu)
 
 Drive the UI from a `--script=` Lua rather than by hand. Relevant commands:
